@@ -153,7 +153,7 @@ The workshop is organized into **10 comprehensive sections**:
 
 ## Author
 
-**Saurabh Altalwar** — GitHub AI Developer
+**Saurabh Talwar** — GitHub AI Developer
 
 ---
 
