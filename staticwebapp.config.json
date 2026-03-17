@@ -1,0 +1,13 @@
+{
+  "navigationFallback": {
+    "rewrite": "/index.html"
+  },
+  "routes": [
+    { "route": "/", "rewrite": "/workshop.html" },
+    { "route": "/workshop", "rewrite": "/workshop.html" },
+    { "route": "/presentation", "rewrite": "/presentation.html" }
+  ],
+  "mimeTypes": {
+    ".html": "text/html"
+  }
+}
