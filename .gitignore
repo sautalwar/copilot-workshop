@@ -1,0 +1,12 @@
+.DS_Store
+Thumbs.db
+*.pyc
+__pycache__/
+node_modules/
+.env
+_css.txt
+_js.txt
+_slides_part1.txt
+_slides_part2.txt
+*.py
+!requirements.txt

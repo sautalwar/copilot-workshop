@@ -1,0 +1,2205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mastering GitHub Copilot Configuration — Workshop</title>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   THEME & VARIABLES
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #1c2333;
+  --accent: #8b5cf6;
+  --accent-dim: rgba(139, 92, 246, 0.15);
+  --accent-blue: #58a6ff;
+  --accent-blue-dim: rgba(88, 166, 255, 0.15);
+  --text: #e6edf3;
+  --text-title: #ffffff;
+  --text-muted: #8b949e;
+  --code-orange: #f0883e;
+  --success: #3fb950;
+  --border: #30363d;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+  --slide-transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PROGRESS BAR
+   ═══════════════════════════════════════════════════════════════ */
+#progress-bar {
+  position: fixed; top: 0; left: 0;
+  height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent-blue));
+  z-index: 1000; transition: width 0.4s ease;
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDE COUNTER
+   ═══════════════════════════════════════════════════════════════ */
+#slide-counter {
+  position: fixed; bottom: 56px; right: 24px;
+  font-size: 14px; color: var(--text-muted);
+  z-index: 1000; font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  background: rgba(13, 17, 23, 0.8); padding: 6px 14px;
+  border-radius: 8px; border: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAV HINT
+   ═══════════════════════════════════════════════════════════════ */
+#nav-hint {
+  position: fixed; bottom: 56px; left: 24px;
+  font-size: 12px; color: var(--text-muted);
+  z-index: 1000; display: flex; gap: 6px; align-items: center;
+  opacity: 0.5; transition: opacity 0.3s;
+}
+#nav-hint:hover { opacity: 1; }
+.key-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 24px; background: var(--bg-secondary);
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 11px; color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SLIDES CONTAINER
+   ═══════════════════════════════════════════════════════════════ */
+#slides-wrapper {
+  width: 100%; height: 100vh;
+  position: relative; overflow: hidden;
+}
+
+.slide {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100vh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 60px 80px 100px;
+  opacity: 0; transform: translateX(60px);
+  transition: opacity var(--slide-transition), transform var(--slide-transition);
+  pointer-events: none;
+  overflow-y: auto;
+}
+.slide.active {
+  opacity: 1; transform: translateX(0);
+  pointer-events: auto;
+}
+.slide.prev {
+  opacity: 0; transform: translateX(-60px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW MODE
+   ═══════════════════════════════════════════════════════════════ */
+body.overview #slides-wrapper {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px; padding: 24px;
+  overflow-y: auto; height: 100vh;
+}
+body.overview .slide {
+  position: relative !important;
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  height: 200px; min-height: 200px;
+  padding: 16px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+body.overview .slide:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
+body.overview .slide.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+}
+body.overview #progress-bar,
+body.overview #slide-counter,
+body.overview #nav-hint,
+body.overview #speaker-notes { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SPEAKER NOTES
+   ═══════════════════════════════════════════════════════════════ */
+#speaker-notes {
+  position: fixed; bottom: 44px; left: 0; right: 0;
+  background: rgba(22, 27, 34, 0.97);
+  border-top: 2px solid var(--accent);
+  padding: 16px 40px 12px;
+  font-size: 15px; color: var(--text);
+  z-index: 999;
+  transform: translateY(calc(100% + 44px));
+  transition: transform 0.3s ease;
+  backdrop-filter: blur(12px);
+  max-height: 30vh; overflow-y: auto;
+}
+#speaker-notes.visible { transform: translateY(0); }
+#speaker-notes .notes-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+#speaker-notes .notes-label {
+  font-size: 11px; text-transform: uppercase;
+  letter-spacing: 2px; color: var(--accent);
+  font-weight: 600;
+}
+#notes-status {
+  font-size: 10px; color: var(--text-muted); opacity: 0;
+  transition: opacity 0.3s ease; letter-spacing: 0.5px;
+}
+#notes-status.show { opacity: 1; }
+#notes-content {
+  min-height: 40px; padding: 10px 14px;
+  background: rgba(139, 92, 246, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 8px; outline: none;
+  font-size: 14px; line-height: 1.6; color: var(--text);
+  transition: border-color 0.2s;
+}
+#notes-content:focus {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.07);
+}
+#notes-content:empty::before {
+  content: 'Click here to add speaker notes…';
+  color: var(--text-muted); font-style: italic; pointer-events: none;
+}
+#notes-actions {
+  display: flex; gap: 8px; margin-top: 8px; justify-content: flex-end;
+}
+#notes-actions button {
+  font-size: 11px; padding: 4px 12px; border-radius: 6px;
+  border: 1px solid rgba(139, 92, 246, 0.3); background: rgba(139, 92, 246, 0.1);
+  color: var(--accent); cursor: pointer; transition: all 0.2s;
+  font-family: inherit; letter-spacing: 0.3px;
+}
+#notes-actions button:hover {
+  background: rgba(139, 92, 246, 0.2); border-color: var(--accent);
+}
+.slide-notes { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TYPOGRAPHY
+   ═══════════════════════════════════════════════════════════════ */
+.slide-title {
+  font-size: clamp(28px, 4vw, 48px);
+  font-weight: 700; color: var(--text-title);
+  margin-bottom: 12px; line-height: 1.2;
+}
+.slide-subtitle {
+  font-size: clamp(16px, 2vw, 22px);
+  color: var(--text-muted); font-weight: 400;
+  margin-bottom: 32px;
+}
+.section-title {
+  font-size: clamp(36px, 5vw, 64px);
+  font-weight: 800; color: var(--text-title);
+  text-align: center; margin-bottom: 16px;
+  background: linear-gradient(135deg, var(--text-title), var(--accent));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.section-tagline {
+  font-size: clamp(16px, 2vw, 24px);
+  color: var(--text-muted); text-align: center;
+  margin-bottom: 40px; max-width: 700px;
+}
+.mono { font-family: var(--font-mono); color: var(--code-orange); }
+.accent { color: var(--accent); }
+.blue { color: var(--accent-blue); }
+.green { color: var(--success); }
+.muted { color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════════════
+   LAYOUT COMPONENTS
+   ═══════════════════════════════════════════════════════════════ */
+.content { width: 100%; max-width: 1100px; }
+.columns { display: grid; gap: 24px; }
+.col-2 { grid-template-columns: 1fr 1fr; }
+.col-3 { grid-template-columns: 1fr 1fr 1fr; }
+.col-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+/* No hover effect — cards are display-only, not interactive */
+.card-accent { border-left: 3px solid var(--accent); }
+.card-blue { border-left: 3px solid var(--accent-blue); }
+.card-green { border-left: 3px solid var(--success); }
+.card-orange { border-left: 3px solid var(--code-orange); }
+
+.card h3 {
+  font-size: 18px; color: var(--text-title);
+  margin-bottom: 12px; font-weight: 600;
+}
+.card p, .card li {
+  font-size: 14px; color: var(--text);
+  line-height: 1.7;
+}
+.card .card-icon {
+  font-size: 32px; margin-bottom: 12px; display: block;
+}
+
+.icon-row {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+.icon-row:last-child { border-bottom: none; }
+.icon-row .icon { font-size: 28px; flex-shrink: 0; width: 40px; text-align: center; }
+.icon-row .row-content h4 {
+  font-size: 16px; color: var(--text-title); margin-bottom: 4px; font-weight: 600;
+}
+.icon-row .row-content p {
+  font-size: 14px; color: var(--text-muted); line-height: 1.5;
+}
+
+.big-stat {
+  text-align: center; padding: 20px;
+}
+.big-stat .stat-num {
+  font-size: clamp(40px, 6vw, 72px);
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--accent-blue));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; line-height: 1;
+}
+.big-stat .stat-label {
+  font-size: 14px; color: var(--text-muted); margin-top: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   AGENDA STYLES
+   ═══════════════════════════════════════════════════════════════ */
+.agenda-container { width: 100%; max-width: 1100px; overflow-y: auto; max-height: calc(100vh - 160px); }
+.agenda-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+.agenda-tab {
+  padding: 10px 24px; border-radius: 8px; cursor: pointer;
+  font-size: 15px; font-weight: 600; border: 1px solid var(--border);
+  background: var(--bg-secondary); color: var(--text-muted);
+  transition: all 0.2s;
+}
+.agenda-tab.active {
+  background: rgba(139, 92, 246, 0.15); color: var(--accent);
+  border-color: var(--accent);
+}
+.agenda-tab:hover:not(.active) {
+  border-color: rgba(139, 92, 246, 0.4);
+  color: var(--text);
+}
+.agenda-day { display: none; }
+.agenda-day.active { display: block; }
+.agenda-day-subtitle {
+  font-size: 14px; color: var(--text-muted); margin-bottom: 16px;
+  font-style: italic;
+}
+.agenda-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 8px 16px; border-radius: 10px;
+  border-left: 3px solid transparent;
+  transition: background 0.2s;
+}
+.agenda-item:hover { background: rgba(139, 92, 246, 0.04); }
+.agenda-item.type-session { border-left-color: var(--accent); }
+.agenda-item.type-lab { border-left-color: var(--success); }
+.agenda-item.type-hackathon { border-left-color: var(--accent-blue); }
+.agenda-item.type-break { border-left-color: var(--border); opacity: 0.7; }
+.agenda-icon { font-size: 24px; flex-shrink: 0; width: 36px; text-align: center; padding-top: 2px; }
+.agenda-time {
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-muted);
+  min-width: 140px; flex-shrink: 0; padding-top: 4px;
+}
+.agenda-details { flex: 1; }
+.agenda-title { font-size: 15px; font-weight: 600; color: var(--text-title); margin-bottom: 2px; }
+.agenda-desc { font-size: 13px; color: var(--text-muted); line-height: 1.4; }
+.agenda-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: var(--accent-blue); margin-top: 4px;
+  text-decoration: none; opacity: 0.8;
+}
+.agenda-link:hover { opacity: 1; text-decoration: underline; }
+.agenda-section-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; color: var(--accent); cursor: pointer;
+  margin-top: 4px; opacity: 0.7;
+}
+.agenda-section-link:hover { opacity: 1; }
+
+.note-bar {
+  margin-top: 24px; padding: 12px 20px;
+  background: var(--accent-dim);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  font-size: 13px; color: var(--text-muted);
+  font-style: italic;
+}
+.note-bar.blue-note {
+  background: var(--accent-blue-dim);
+  border-left-color: var(--accent-blue);
+}
+
+ul.clean { list-style: none; }
+ul.clean li { padding: 6px 0; font-size: 15px; line-height: 1.6; }
+ul.clean li::before {
+  content: '▸'; color: var(--accent); margin-right: 10px; font-weight: bold;
+}
+ul.bullet { list-style: none; }
+ul.bullet li { padding: 8px 0; font-size: 15px; line-height: 1.6; display: flex; align-items: flex-start; gap: 10px; }
+ul.bullet li .b { color: var(--accent); flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   FEATURE MATRIX TABLE
+   ═══════════════════════════════════════════════════════════════ */
+.matrix-grid {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  font-size: 13px;
+}
+.matrix-grid th {
+  padding: 10px 8px;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--accent);
+  text-align: center;
+  white-space: nowrap;
+}
+.matrix-grid th:first-child { text-align: left; }
+.matrix-grid td {
+  padding: 6px 8px; text-align: center;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.4);
+  font-size: 13px;
+}
+.matrix-grid td:first-child {
+  text-align: left; font-weight: 500; color: var(--text);
+  font-size: 12px; white-space: nowrap;
+}
+.matrix-grid tr:hover td { background: rgba(139, 92, 246, 0.05); }
+.mx-yes { color: var(--success); }
+.mx-no { color: var(--text-muted); opacity: 0.4; }
+.mx-preview { color: var(--accent-blue); }
+.mx-na { color: var(--text-muted); font-size: 12px; font-style: italic; opacity: 0.5; letter-spacing: 1px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPARISON LAYOUT
+   ═══════════════════════════════════════════════════════════════ */
+.vs-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--accent); color: white;
+  font-weight: 800; font-size: 16px;
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2; box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+}
+.comparison { position: relative; }
+
+/* ═══════════════════════════════════════════════════════════════
+   PYRAMID / TIER
+   ═══════════════════════════════════════════════════════════════ */
+.tier {
+  width: 100%; padding: 20px 28px;
+  border-radius: 12px; margin-bottom: 16px;
+  border-left: 4px solid;
+  background: var(--bg-secondary);
+}
+.tier-1 { border-color: var(--accent); }
+.tier-2 { border-color: var(--accent-blue); }
+.tier-3 { border-color: var(--success); }
+.tier h3 { font-size: 17px; color: var(--text-title); margin-bottom: 6px; }
+.tier p { font-size: 14px; color: var(--text-muted); line-height: 1.6; }
+.tier-label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 2px;
+  font-weight: 700; margin-bottom: 8px; display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ARCHITECTURE DIAGRAM
+   ═══════════════════════════════════════════════════════════════ */
+.arch-box {
+  border: 2px solid var(--border); border-radius: 12px;
+  padding: 16px 20px; text-align: center;
+  background: var(--bg-secondary);
+  font-size: 13px; font-weight: 600;
+  color: var(--text-title); position: relative;
+}
+.arch-box.accent-border { border-color: var(--accent); }
+.arch-box.blue-border { border-color: var(--accent-blue); }
+.arch-box.green-border { border-color: var(--success); }
+.arch-arrow {
+  text-align: center; font-size: 20px;
+  color: var(--accent); padding: 4px 0;
+}
+.tool-pills {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center;
+}
+.pill {
+  display: inline-block;
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-family: var(--font-mono);
+  background: var(--accent-dim); color: var(--accent);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+.pill.blue {
+  background: var(--accent-blue-dim); color: var(--accent-blue);
+  border-color: rgba(88, 166, 255, 0.3);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LINKS TABLE
+   ═══════════════════════════════════════════════════════════════ */
+.link-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px; transition: border-color 0.2s;
+}
+/* link-row hover removed — display-only items */
+.link-row .link-icon { font-size: 20px; flex-shrink: 0; }
+.link-row .link-text {
+  font-size: 15px; color: var(--accent-blue);
+  text-decoration: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .slide { padding: 40px 24px 100px; }
+  .col-2, .col-3, .col-4 { grid-template-columns: 1fr; }
+  .matrix-grid { font-size: 10px; }
+  .matrix-grid th, .matrix-grid td { padding: 5px 3px; }
+}
+@media (max-width: 600px) {
+  .slide { padding: 30px 16px 100px; }
+  .slide-title { font-size: 24px; }
+  .section-title { font-size: 28px; }
+  .bnav-pill { font-size: 9px; padding: 2px 6px; }
+  .bnav-dot { width: 5px; height: 5px; }
+  .bnav-dot.section-gap { margin-right: 5px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION HEADER BACKGROUNDS
+   ═══════════════════════════════════════════════════════════════ */
+.slide.section-slide {
+  background: radial-gradient(ellipse at 50% 40%, rgba(139, 92, 246, 0.12) 0%, transparent 70%),
+              var(--bg-primary);
+}
+.slide.title-slide {
+  background: radial-gradient(ellipse at 30% 60%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 30%, rgba(88, 166, 255, 0.1) 0%, transparent 50%),
+              linear-gradient(160deg, #0d1117 0%, #161b22 100%);
+}
+
+/* Subtle grid pattern for section slides */
+.slide.section-slide::before {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(139,92,246,0.08) 1px, transparent 0);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* Glow ring for section slides */
+.glow-ring {
+  position: absolute;
+  width: 400px; height: 400px;
+  border-radius: 50%;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  pointer-events: none;
+  animation: pulse-ring 4s ease-in-out infinite;
+}
+@keyframes pulse-ring {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+/* Feature grid for CLI slide */
+.feature-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; width: 100%;
+}
+.feature-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 16px; background: var(--bg-secondary);
+  border: 1px solid var(--border); border-radius: 10px;
+  transition: border-color 0.2s;
+}
+/* feature-item hover removed — display-only items */
+.feature-item .fi-code {
+  font-family: var(--font-mono); color: var(--code-orange);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  flex-shrink: 0;
+}
+.feature-item .fi-desc { font-size: 13px; color: var(--text-muted); }
+
+/* Hook lifecycle */
+.lifecycle-step {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px;
+}
+.lifecycle-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  flex-shrink: 0; border: 2px solid;
+}
+.lifecycle-line {
+  width: 2px; height: 24px; margin-left: 22px;
+}
+
+/* Plugin structure */
+.plugin-tree {
+  font-family: var(--font-mono); font-size: 14px;
+  line-height: 2; color: var(--text);
+}
+.plugin-tree .folder { color: var(--accent-blue); }
+.plugin-tree .file { color: var(--text-muted); }
+
+/* Stats grid */
+.stats-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 20px; width: 100%; max-width: 800px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BOTTOM NAVIGATION BAR
+   ═══════════════════════════════════════════════════════════════ */
+#bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 44px;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(48, 54, 61, 0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px 16px;
+  user-select: none;
+}
+
+/* Section pills row */
+#bottom-nav-pills {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.bnav-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 10px;
+  color: #8b949e;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, font-weight 0.2s ease;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.bnav-pill:hover {
+  color: #c9d1d9;
+  background: rgba(139, 92, 246, 0.08);
+}
+.bnav-pill.active {
+  background: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+  font-weight: 600;
+}
+
+/* Slide dots row */
+#bottom-nav-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.bnav-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.2);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  flex-shrink: 0;
+}
+.bnav-dot:hover {
+  transform: scale(1.6);
+  background: rgba(139, 92, 246, 0.6);
+}
+.bnav-dot.section-active {
+  background: rgba(139, 92, 246, 0.4);
+}
+.bnav-dot.current {
+  background: #8b5cf6;
+  box-shadow: 0 0 6px rgba(139, 92, 246, 0.6);
+}
+.bnav-dot.section-gap {
+  margin-right: 8px;
+}
+
+/* Pill hover brightens section dots */
+.bnav-pill:hover ~ #bottom-nav-dots .bnav-dot,
+.bnav-pill.hovered ~ #bottom-nav-dots .bnav-dot { /* fallback for JS approach */ }
+
+/* Dot tooltip */
+#dot-tooltip {
+  position: fixed;
+  padding: 4px 10px;
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid rgba(48, 54, 61, 0.7);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #e6edf3;
+  pointer-events: none;
+  z-index: 1100;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+#dot-tooltip.visible {
+  opacity: 1;
+}
+
+/* Hide bottom nav in overview mode */
+body.overview #bottom-nav,
+body.overview #dot-tooltip { display: none; }
+</style>
+
+</head>
+<body>
+
+<div id="progress-bar" style="width: 3.03030%;"></div>
+<div id="slide-counter">1 / 33</div>
+<div id="nav-hint">
+  <span class="key-icon">←</span><span class="key-icon">→</span>
+  <span style="margin:0 4px; font-size:11px">navigate</span>
+  <span class="key-icon">N</span><span style="font-size:11px">notes</span>
+  <span class="key-icon">Esc</span><span style="font-size:11px">overview</span>
+</div>
+
+<nav id="bottom-nav">
+  <div id="bottom-nav-pills"><div class="bnav-pill active" data-section="intro">Intro</div><div class="bnav-pill" data-section="landscape">The GitHub Platform</div><div class="bnav-pill" data-section="config-arch">Config Architecture</div><div class="bnav-pill" data-section="instructions">Instructions</div><div class="bnav-pill" data-section="path-instructions">Path Instructions</div><div class="bnav-pill" data-section="prompts">Prompt Files</div><div class="bnav-pill" data-section="agents">Custom Agents</div><div class="bnav-pill" data-section="governance">Governance</div><div class="bnav-pill" data-section="advanced">Advanced</div><div class="bnav-pill" data-section="demo">Demo</div></div>
+  <div id="bottom-nav-dots"><div class="bnav-dot current" data-slide-index="0" data-section="intro"></div><div class="bnav-dot" data-slide-index="1" data-section="intro"></div><div class="bnav-dot section-gap" data-slide-index="2" data-section="intro"></div><div class="bnav-dot" data-slide-index="3" data-section="landscape"></div><div class="bnav-dot" data-slide-index="4" data-section="landscape"></div><div class="bnav-dot" data-slide-index="5" data-section="landscape"></div><div class="bnav-dot section-gap" data-slide-index="6" data-section="landscape"></div><div class="bnav-dot" data-slide-index="7" data-section="config-arch"></div><div class="bnav-dot" data-slide-index="8" data-section="config-arch"></div><div class="bnav-dot section-gap" data-slide-index="9" data-section="config-arch"></div><div class="bnav-dot" data-slide-index="10" data-section="instructions"></div><div class="bnav-dot" data-slide-index="11" data-section="instructions"></div><div class="bnav-dot" data-slide-index="12" data-section="instructions"></div><div class="bnav-dot section-gap" data-slide-index="13" data-section="instructions"></div><div class="bnav-dot" data-slide-index="14" data-section="path-instructions"></div><div class="bnav-dot" data-slide-index="15" data-section="path-instructions"></div><div class="bnav-dot section-gap" data-slide-index="16" data-section="path-instructions"></div><div class="bnav-dot" data-slide-index="17" data-section="prompts"></div><div class="bnav-dot" data-slide-index="18" data-section="prompts"></div><div class="bnav-dot section-gap" data-slide-index="19" data-section="prompts"></div><div class="bnav-dot" data-slide-index="20" data-section="agents"></div><div class="bnav-dot" data-slide-index="21" data-section="agents"></div><div class="bnav-dot section-gap" data-slide-index="22" data-section="agents"></div><div class="bnav-dot" data-slide-index="23" data-section="governance"></div><div class="bnav-dot" data-slide-index="24" data-section="governance"></div><div class="bnav-dot section-gap" data-slide-index="25" data-section="governance"></div><div class="bnav-dot" data-slide-index="26" data-section="advanced"></div><div class="bnav-dot" data-slide-index="27" data-section="advanced"></div><div class="bnav-dot section-gap" data-slide-index="28" data-section="advanced"></div><div class="bnav-dot" data-slide-index="29" data-section="demo"></div><div class="bnav-dot" data-slide-index="30" data-section="demo"></div><div class="bnav-dot" data-slide-index="31" data-section="demo"></div><div class="bnav-dot" data-slide-index="32" data-section="demo"></div></div>
+</nav>
+<div id="dot-tooltip"></div>
+
+<div id="speaker-notes" class="">
+  <div class="notes-header">
+    <div class="notes-label">Speaker Notes</div>
+    <span id="notes-status" class="show">✓ Saved</span>
+  </div>
+  <div id="notes-content" contenteditable="true"></div>
+  <div id="notes-actions">
+    <button id="btn-save-html" title="Download presentation with all notes baked in">💾 Export HTML with Notes</button>
+  </div>
+</div>
+
+<div id="slides-wrapper">
+<section class="slide title-slide active" data-slide="0" data-section="intro" data-title="Title">
+  <div class="content">
+    <div style="text-align: center; font-size: 4rem; margin-bottom: 2rem;">🛠️</div>
+    <h1 style="text-align: center; margin-bottom: 1rem;">
+      Mastering GitHub Copilot <span style="color: var(--accent);">Configuration</span>
+    </h1>
+    <p style="text-align: center; font-size: 1.3rem; color: var(--text-muted); margin-bottom: 2rem;">
+      From Zero to Production-Ready — A Hands-On Workshop
+    </p>
+    <p style="text-align: center; color: var(--text-muted);">
+      Saurabh Altalwar
+    </p>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 0:00-2:00 | 2 min]</strong> Welcome everyone. Today we take a real repository and walk through every layer of GitHub Copilot configuration from scratch. By the end you will know how to set up copilot-instructions, path-specific instructions, prompt files, custom agents, and content governance policies.
+  </div>
+</section>
+<section class="slide" data-slide="1" data-section="intro" data-title="Why Config Matters">
+  <div class="content">
+    <h2>Why Configuration Matters</h2>
+    <p class="slide-subtitle">The difference between AI-assisted and AI-governed development</p>
+    <div class="columns col-3">
+      <div class="card">
+        <strong style="color: var(--accent);">Without Config</strong>
+        <ul class="clean">
+          <li>Generic suggestions</li>
+          <li>No consistency</li>
+          <li>Works but misses context</li>
+        </ul>
+      </div>
+      <div class="card card-accent">
+        <strong style="color: var(--accent);">With Config</strong>
+        <ul class="clean">
+          <li>Follows YOUR standards</li>
+          <li>Team-wide consistency</li>
+          <li>Knows your architecture</li>
+        </ul>
+      </div>
+      <div class="card card-blue">
+        <strong style="color: var(--accent-blue);">Enterprise Ready</strong>
+        <ul class="clean">
+          <li>Content governance</li>
+          <li>Org-level policies</li>
+          <li>Audit trails</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 2:00-4:00 | 2 min]</strong> Without configuration, Copilot is a talented but undirected intern. It generates code that WORKS but doesn't follow YOUR conventions. With configuration, it becomes a team member who knows your architecture, naming conventions, and security requirements. At the enterprise level, you get governance — content exclusion policies, org-level controls, audit trails.
+  </div>
+</section>
+<section class="slide" data-slide="2" data-section="intro" data-title="Agenda">
+  <div class="content">
+    <h2>Workshop Agenda</h2>
+    <p class="slide-subtitle">60 minutes, soup to nuts</p>
+    <div class="icon-row">
+      <div><strong>The GitHub Platform</strong><br><span style="color: var(--text-muted);">AI across the dev lifecycle</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Configuration Architecture</strong><br><span style="color: var(--text-muted);">.github structure</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>copilot-instructions.md</strong><br><span style="color: var(--text-muted);">team AI standards</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Path-Specific Instructions</strong><br><span style="color: var(--text-muted);">different rules per file type</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Prompt Files and Custom Agents</strong><br><span style="color: var(--text-muted);">reusable templates and AI personas</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Enterprise Governance</strong><br><span style="color: var(--text-muted);">content exclusion and inclusion</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Live Demo</strong><br><span style="color: var(--text-muted);">end to end walkthrough</span></div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 4:00-5:00 | 1 min]</strong> Here is our roadmap. We start with WHY GitHub Copilot is a full platform, then go deep into each configuration layer using real files from our hackathon repository at github.com/sautalwar/ghcp-hackathon-custom. Everything I show you today is in that repo — fork it and start customizing immediately.
+  </div>
+</section>
+<section class="slide section-slide" data-slide="3" data-section="landscape" data-title="The GitHub Platform">
+  <div class="content" style="text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">🏔️</div>
+    <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">The GitHub Platform</h1>
+    <p style="font-size: 1.3rem; color: var(--text-muted);">AI assistance across the entire development lifecycle</p>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 5:00-5:30 | 30 sec]</strong> Let us understand why GitHub Copilot is more than a code editor — it is a full development platform with AI woven into every stage.
+  </div>
+</section>
+<section class="slide" data-slide="4" data-section="landscape" data-title="Platform Integration">
+  <div class="content">
+    <h2>GitHub Copilot — A Full Platform</h2>
+    <p class="slide-subtitle">AI assistance at every stage of the software development lifecycle</p>
+    <div class="columns col-3">
+      <div class="card" style="border-left: 4px solid var(--accent);">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📝</div>
+        <strong style="color: var(--accent);">Issues</strong>
+        <p style="font-size: 0.9rem; margin-top: 0.5rem;"><code style="color: var(--accent);">Assignee: @copilot</code></p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Copilot autonomously creates a branch, writes code, and opens a PR</p>
+      </div>
+      <div class="card" style="border-left: 4px solid var(--accent-blue);">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">💻</div>
+        <strong style="color: var(--accent-blue);">IDE &amp; Editor</strong>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">VS Code · JetBrains · Visual Studio · Xcode · Eclipse · Neovim</p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Chat · Completions · Agent Mode · Inline Edits</p>
+      </div>
+      <div class="card" style="border-left: 4px solid var(--success);">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⌨️</div>
+        <strong style="color: var(--success);">CLI</strong>
+        <p style="font-size: 0.9rem; margin-top: 0.5rem;"><code style="color: var(--success);">$ ghcs</code></p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Terminal-native agent with fleet mode, hooks, plugins, and --yolo autopilot</p>
+      </div>
+      <div class="card" style="border-left: 4px solid var(--accent);">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+        <strong style="color: var(--accent);">Code Review</strong>
+        <p style="font-size: 0.85rem; margin-top: 0.5rem;"><em>PR #142 — Copilot Review</em></p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">⚠️ Line 47: SQL injection risk — use parameterized queries</p>
+        <p style="font-size: 0.85rem; color: var(--success);">✓ Suggests fix inline</p>
+      </div>
+      <div class="card" style="border-left: 4px solid var(--accent-blue);">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🤖</div>
+        <strong style="color: var(--accent-blue);">Coding Agent</strong>
+        <p style="font-size: 0.85rem; margin-top: 0.5rem;"><em>Autonomous mode</em></p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Assign an issue → Copilot creates a branch, implements changes, runs tests, opens a PR</p>
+      </div>
+      <div class="card" style="border-left: 4px solid var(--success);">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📋</div>
+        <strong style="color: var(--success);">Pull Requests</strong>
+        <p style="font-size: 0.85rem; margin-top: 0.5rem;"><em>PR Summary (auto-generated)</em></p>
+        <p style="font-size: 0.85rem; color: var(--text-muted);">Copilot summarizes changes, lists files modified, highlights risks</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 5:30-8:00 | 2.5 min]</strong> This is what makes GitHub Copilot a PLATFORM, not just a coding assistant. ISSUES: You can assign an issue directly to @copilot and it autonomously creates a branch, writes the implementation, and opens a PR. IDE: Copilot works across 8 editors with chat, inline completions, agent mode, and inline edits. CLI: The terminal-native agent supports fleet mode for parallel work, hooks for lifecycle control, plugins for extensibility. CODE REVIEW: Add Copilot as a reviewer on any PR and it leaves actionable inline comments catching security issues and suggesting fixes. CODING AGENT: The fully autonomous agent takes an issue, creates a branch, implements the solution, runs tests, and opens a PR without human intervention. PULL REQUESTS: Copilot auto-generates PR summaries, lists files changed, and highlights potential risks. Every single one of these surfaces respects your configuration.
+  </div>
+</section>
+<section class="slide" data-slide="5" data-section="landscape" data-title="Enterprise Governance">
+  <div class="content">
+    <h2>Enterprise Governance — Built Into GitHub</h2>
+    <p class="slide-subtitle">Manage Copilot policies directly from your GitHub organization settings</p>
+    <div class="columns col-2">
+      <div class="card" style="border-top: 4px solid var(--accent);">
+        <strong style="color: var(--accent);">Content Exclusion</strong>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem;">github.com → Org Settings → Copilot</p>
+        <div style="font-size: 0.85rem; background: var(--bg-tertiary); padding: 0.5rem; margin: 0.5rem 0; border-radius: 4px;">
+          <div><strong>Repository:</strong> contoso/secret-algorithms</div>
+          <div style="margin-top: 0.3rem;"><strong>Paths to exclude:</strong></div>
+          <div style="color: var(--text-muted);">**/.env</div>
+          <div style="color: var(--text-muted);">**/secrets/**</div>
+          <div style="color: var(--text-muted);">**/proprietary/**</div>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">These files will never be sent to Copilot</p>
+      </div>
+      <div class="card" style="border-top: 4px solid var(--accent-blue);">
+        <strong style="color: var(--accent-blue);">Org-Level Policies</strong>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem;">github.com → Org Settings → Copilot → Policies</p>
+        <div style="font-size: 0.85rem; background: var(--bg-tertiary); padding: 0.5rem; margin: 0.5rem 0; border-radius: 4px;">
+          <div>☑ Copilot Chat in IDE (Enabled)</div>
+          <div>☑ Copilot in github.com (Enabled)</div>
+          <div>☑ Copilot Coding Agent (Enabled)</div>
+          <div>☑ Suggestions matching public code (Blocked)</div>
+          <div>☑ Allow model selection (Enabled)</div>
+        </div>
+      </div>
+      <div class="card" style="border-top: 4px solid var(--success);">
+        <strong style="color: var(--success);">IP Indemnity</strong>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem;">Business &amp; Enterprise plans</p>
+        <p style="font-size: 0.85rem; margin: 0.5rem 0;">Microsoft provides IP indemnity for Copilot Business and Enterprise customers.</p>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">Public code filter prevents flagged matches from being returned.</p>
+      </div>
+      <div class="card" style="border-top: 4px solid var(--code-orange);">
+        <strong style="color: var(--code-orange);">Audit &amp; Compliance</strong>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.3rem;">github.com → Org Settings → Audit Log</p>
+        <div style="font-size: 0.85rem; background: var(--bg-tertiary); padding: 0.5rem; margin: 0.5rem 0; border-radius: 4px;">
+          <div>copilot.content_exclusion_changed</div>
+          <div>copilot.cfb_seat_assignment</div>
+          <div>copilot.policy_update</div>
+        </div>
+        <p style="font-size: 0.8rem; color: var(--text-muted);">Every Copilot admin action is logged</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 8:00-11:00 | 3 min]</strong> Let me walk you through each governance feature and WHERE you find them in GitHub. CONTENT EXCLUSION: Go to your organization on GitHub.com, click Settings, then Copilot in the left sidebar, then Content Exclusion. Here you add repositories and glob patterns. Once configured, these files are NEVER sent to Copilot — not in completions, not in chat, not in agent mode, not anywhere. ORG-LEVEL POLICIES: Same Settings page under Policies. Toggle features on and off for the entire organization. You can also block suggestions that match public code. AUDIT AND COMPLIANCE: Go to Settings then Audit Log. Every Copilot admin action shows up here — searchable, exportable, and API-accessible. For regulated industries, this audit trail is essential.
+  </div>
+</section>
+<section class="slide" data-slide="6" data-section="landscape" data-title="Multi-Model Multi-Surface">
+  <div class="content">
+    <h2>Multi-Model, Multi-Surface</h2>
+    <p class="slide-subtitle">Choose the best model for every task, use it everywhere</p>
+    <div class="columns col-2">
+      <div>
+        <div class="tier">
+          <strong style="color: var(--accent);">Deep Reasoning</strong>
+          <p>o1 / o3 / Claude 3.7</p>
+        </div>
+        <div class="tier">
+          <strong style="color: var(--accent-blue);">Balanced</strong>
+          <p>GPT-4o / Claude 3.5 / Gemini 1.5 Pro</p>
+        </div>
+        <div class="tier">
+          <strong style="color: var(--success);">Fast</strong>
+          <p>GPT-4o mini / Gemini Flash</p>
+        </div>
+      </div>
+      <div class="card">
+        <strong style="color: var(--accent);">Available Everywhere</strong>
+        <div style="margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+          <span class="pill">VS Code</span>
+          <span class="pill">CLI</span>
+          <span class="pill">JetBrains</span>
+          <span class="pill">Visual Studio</span>
+          <span class="pill">GitHub.com</span>
+          <span class="pill">Xcode</span>
+          <span class="pill">Eclipse</span>
+          <span class="pill">Neovim</span>
+        </div>
+        <div class="note-bar" style="margin-top: 1rem;">
+          <strong>⚡</strong> Your configuration travels with you across ALL surfaces
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 11:00-12:00 | 1 min]</strong> GitHub Copilot gives you GPT, Claude, AND Gemini — choose the right model per conversation. And it works across 8 IDEs plus the web. You pick the best model for every task, use it everywhere. TRANSITION: Now let us look at HOW you configure Copilot.
+  </div>
+</section>
+<section class="slide section-slide" data-slide="7" data-section="config-arch" data-title="Config Architecture">
+  <div class="content" style="text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">📐</div>
+    <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">Configuration Architecture</h1>
+    <p style="font-size: 1.3rem; color: var(--text-muted);">The .github/ directory is your AI control center</p>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 12:00-12:30 | 30 sec]</strong> Everything starts with the .github/ directory in your repository.
+  </div>
+</section>
+<section class="slide" data-slide="8" data-section="config-arch" data-title="Repo Structure">
+  <div class="content">
+    <h2>Inside Our Hackathon Repo</h2>
+    <p class="slide-subtitle">github.com/sautalwar/ghcp-hackathon-custom</p>
+    <div class="columns col-2">
+      <div>
+        <div class="card" style="border-left: 4px solid var(--accent); margin-bottom: 1rem;">
+          <strong style="color: var(--accent);">📋 Instructions — Always-on guardrails</strong>
+          <div style="font-size: 0.85rem; margin-top: 0.5rem; font-family: var(--font-mono); color: var(--text-muted);">
+            <div>copilot-instructions.md</div>
+            <div style="margin-left: 1rem; color: var(--text);">(45KB — repo-wide standards)</div>
+            <div>instructions/python.instructions.md</div>
+            <div style="margin-left: 1rem; color: var(--text);">(→ **/*.py only)</div>
+          </div>
+          <p style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted);">
+            <strong>What:</strong> Persistent rules Copilot ALWAYS follows. <strong>When:</strong> Automatically loaded every conversation.
+          </p>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--accent-blue); margin-bottom: 1rem;">
+          <strong style="color: var(--accent-blue);">📝 Prompt Files — On-demand templates</strong>
+          <div style="font-size: 0.85rem; margin-top: 0.5rem; font-family: var(--font-mono); color: var(--text-muted);">
+            <div>prompts/</div>
+            <div style="margin-left: 1rem;">create-react-component.prompt.md</div>
+          </div>
+          <p style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted);">
+            <strong>What:</strong> Reusable task recipes you invoke by name. <strong>When:</strong> Only when you explicitly invoke them.
+          </p>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--success);">
+          <strong style="color: var(--success);">🤖 Chat Modes (Custom Agents) — Specialized AI personas</strong>
+          <div style="font-size: 0.85rem; margin-top: 0.5rem; font-family: var(--font-mono); color: var(--text-muted);">
+            <div>chatmodes/</div>
+            <div style="margin-left: 1rem;">azure-principal-architect.chatmode.md</div>
+            <div style="margin-left: 1rem;">beast-mode-4.1.chatmode.md</div>
+          </div>
+          <p style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted);">
+            <strong>What:</strong> Custom AI personalities with their own model, tools, and system prompt. <strong>When:</strong> Switch to them in chat — they replace default behavior.
+          </p>
+        </div>
+      </div>
+      <div>
+        <div class="card" style="border-left: 4px solid var(--code-orange); margin-bottom: 1rem;">
+          <strong style="color: var(--code-orange);">🚫 Content Exclusion — Org Settings → Copilot</strong>
+          <div style="font-size: 0.85rem; margin-top: 0.5rem; font-family: var(--font-mono); color: var(--text-muted); opacity: 0.6;">
+            <div>🔒 content-exclusion/</div>
+            <div style="margin-left: 1rem;">proprietary/</div>
+            <div style="margin-left: 1rem;">.env.production</div>
+          </div>
+          <p style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted);">
+            <strong>Use cases:</strong> Trade secrets, .env files, proprietary algorithms, PII data
+          </p>
+        </div>
+        <div class="card" style="border-left: 4px solid var(--success); margin-bottom: 1rem;">
+          <strong style="color: var(--success);">✅ Content Inclusion (Override)</strong>
+          <div style="font-size: 0.85rem; margin-top: 0.5rem; font-family: var(--font-mono); color: var(--text-muted);">
+            <div>content-inclusion/</div>
+            <div style="margin-left: 1rem;">brown-fox-hindi.txt</div>
+          </div>
+          <p style="font-size: 0.8rem; margin-top: 0.5rem; color: var(--text-muted);">
+            <strong>Use cases:</strong> Shared utilities in excluded repos, public API wrappers
+          </p>
+        </div>
+        <div class="card">
+          <strong style="color: var(--accent);">⚡ Key Differences at a Glance</strong>
+          <table style="font-size: 0.8rem; margin-top: 0.5rem; width: 100%; border-collapse: collapse;">
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 0.3rem;"><strong>Active</strong></td>
+              <td style="padding: 0.3rem;">Always</td>
+              <td style="padding: 0.3rem;">On invoke</td>
+              <td style="padding: 0.3rem;">When selected</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 0.3rem;"><strong>Scope</strong></td>
+              <td style="padding: 0.3rem;">All features</td>
+              <td style="padding: 0.3rem;">Single task</td>
+              <td style="padding: 0.3rem;">Entire session</td>
+            </tr>
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td style="padding: 0.3rem;"><strong>Model</strong></td>
+              <td style="padding: 0.3rem;">—</td>
+              <td style="padding: 0.3rem;">Can specify</td>
+              <td style="padding: 0.3rem;">Can specify</td>
+            </tr>
+            <tr>
+              <td style="padding: 0.3rem;"><strong>Tools</strong></td>
+              <td style="padding: 0.3rem;">—</td>
+              <td style="padding: 0.3rem;">Can specify</td>
+              <td style="padding: 0.3rem;">Can specify</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 12:30-17:00 | 4.5 min]</strong> This is our ACTUAL repository structure. Let me explain each piece. INSTRUCTIONS: Think of these as the constitution. copilot-instructions.md is 45KB of rules that Copilot ALWAYS follows — coding style, naming conventions, commit format, testing frameworks, security rules. Path-specific instructions add extra rules when editing matching files. Instructions never change the model or tools — they add behavioral guardrails. PROMPT FILES: Think of these as saved recipes. You invoke them by name to do a specific task. They CAN specify a model and tools. They are NOT always active — only on demand. CHAT MODES: Think of these as entirely different AI personalities. When you switch to a chat mode, it REPLACES default Copilot with a custom system prompt, model, and tools. PRECEDENCE: Instructions are always on (base layer). Prompts add on top for one task. Chat modes take over entirely for a session. CONTENT EXCLUSION: Configured at org level in GitHub Settings, not in the repo. Tells Copilot to completely ignore certain files. Use cases: .env files, proprietary algorithms, PII data, regulated financial code. CONTENT INCLUSION: The escape hatch. Override exclusion for specific paths when teams need AI help with certain files inside excluded directories.
+  </div>
+</section>
+<section class="slide" data-slide="9" data-section="config-arch" data-title="Config Hierarchy">
+  <div class="content">
+    <h2>Configuration Hierarchy</h2>
+    <p class="slide-subtitle">How Copilot loads and merges instructions</p>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem; margin: 2rem 0;">
+      <div class="arch-box" style="border-left: 4px solid var(--accent);">
+        <strong>Organization Policy</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">enable/disable features</p>
+      </div>
+      <div style="color: var(--text-muted); font-size: 1.5rem;">↓</div>
+      <div class="arch-box" style="border-left: 4px solid var(--accent-blue);">
+        <strong>copilot-instructions.md</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">always loaded repo-wide</p>
+      </div>
+      <div style="color: var(--text-muted); font-size: 1.5rem;">↓</div>
+      <div class="arch-box" style="border-left: 4px solid var(--success);">
+        <strong>Path-Specific Instructions</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">glob-matched per file</p>
+      </div>
+      <div style="color: var(--text-muted); font-size: 1.5rem;">↓</div>
+      <div class="arch-box" style="border-left: 4px solid var(--text-muted);">
+        <strong>User-Level Settings</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">~/.copilot/copilot-instructions.md</p>
+      </div>
+    </div>
+    <div class="note-bar">
+      <strong>⚖️ Conflicts:</strong> Repo-level wins over user-level. Org policies override everything.
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 17:00-18:00 | 1 min]</strong> Understanding the hierarchy is crucial. Org admins set policies at the top. copilot-instructions.md is always loaded for every conversation. Path-specific instructions kick in based on what file you are editing. User-level settings apply last. On conflict, higher levels win — team standards override personal preferences.
+  </div>
+</section>
+<section class="slide section-slide" data-slide="10" data-section="instructions" data-title="copilot-instructions.md">
+  <div class="content" style="text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+    <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">copilot-instructions.md</h1>
+    <p style="font-size: 1.3rem; color: var(--text-muted);">Your team's AI coding constitution</p>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 18:00-18:30 | 30 sec]</strong> Let us dive into the main configuration file.
+  </div>
+</section>
+<section class="slide" data-slide="11" data-section="instructions" data-title="What Goes In">
+  <div class="content">
+    <h2>What Goes In copilot-instructions.md</h2>
+    <p class="slide-subtitle">The anatomy of effective instructions</p>
+    <div class="icon-row">
+      <div><strong>Coding Standards</strong><br><span style="color: var(--text-muted);">naming, formatting</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Testing Frameworks</strong><br><span style="color: var(--text-muted);">which framework per language</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Commit Messages</strong><br><span style="color: var(--text-muted);">topic(subtopic): activity format</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Security Rules</strong><br><span style="color: var(--text-muted);">never hardcode secrets</span></div>
+    </div>
+    <div class="icon-row">
+      <div><strong>Architecture Guidelines</strong><br><span style="color: var(--text-muted);">patterns, file size limits</span></div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 18:30-20:00 | 1.5 min]</strong> Our hackathon repo instructions file is 45KB. It covers coding standards with specific naming conventions, testing frameworks specifying WHICH framework per language, commit messages enforcing YOUR format, security rules as hard guardrails, and architecture guidelines preventing sprawl. Be SPECIFIC — do not say write clean code. Say use camelCase for variables, limit lines to 100 characters.
+  </div>
+</section>
+<section class="slide" data-slide="12" data-section="instructions" data-title="Real Example">
+  <div class="content">
+    <h2>Real Example from the Repo</h2>
+    <p class="slide-subtitle">Actual content from .github/copilot-instructions.md</p>
+    <div class="columns col-2">
+      <div class="card">
+        <strong style="color: var(--accent);">General Guidelines</strong>
+        <div style="font-size: 0.85rem; background: var(--bg-tertiary); padding: 0.75rem; margin-top: 0.5rem; border-radius: 4px; font-family: var(--font-mono);">
+          <div>Always prefer simple solutions</div>
+          <div>Avoid duplication</div>
+          <div>Write code for dev/test/prod</div>
+          <div>Keep files under 200 lines</div>
+          <div>Never mock data for dev/prod</div>
+          <div>Never overwrite .env</div>
+        </div>
+      </div>
+      <div class="card">
+        <strong style="color: var(--accent-blue);">Commit Format</strong>
+        <div style="font-size: 0.85rem; background: var(--bg-tertiary); padding: 0.75rem; margin-top: 0.5rem; border-radius: 4px; font-family: var(--font-mono);">
+          <div><strong>Format:</strong> topic(subtopic): activity</div>
+          <div style="margin-top: 0.5rem;"><strong>Examples:</strong></div>
+          <div style="color: var(--text-muted);">github(instructions): expand details</div>
+          <div style="color: var(--text-muted);">feat(auth): add login</div>
+          <div style="color: var(--text-muted);">fix(api): resolve null pointer</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 20:00-22:00 | 2 min]</strong> REAL content from our repo. Keep files under 200 lines. Never mock data for dev or prod. The commit message format is topic(subtopic): activity. Copilot follows this consistently because we told it to. This one file governs ALL Copilot interactions — chat, completions, agent mode, code review, the coding agent.
+  </div>
+</section>
+<section class="slide" data-slide="13" data-section="instructions" data-title="Best Practices">
+  <div class="content">
+    <h2>Best Practices</h2>
+    <p class="slide-subtitle">Lessons learned from real deployments</p>
+    <div class="columns col-2">
+      <div class="card card-accent">
+        <strong style="color: var(--accent);">Be Specific</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">camelCase for JS, PascalCase for C#</p>
+      </div>
+      <div class="card card-blue">
+        <strong style="color: var(--accent-blue);">Keep It Actionable</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">verifiable instructions</p>
+      </div>
+      <div class="card card-green">
+        <strong style="color: var(--success);">Iterate and Evolve</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">start with 20 rules, grow</p>
+      </div>
+      <div class="card card-orange">
+        <strong style="color: var(--code-orange);">Team Buy-In</strong>
+        <p style="color: var(--text-muted); font-size: 0.9rem;">review in PRs like code</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 22:00-23:00 | 1 min]</strong> Four lessons. Be specific. Actionable. Iterate. Get team buy-in.
+  </div>
+</section>
+<section class="slide section-slide" data-slide="14" data-section="path-instructions" data-title="Path Instructions">
+  <div class="content" style="text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%;">
+    <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+    <h1 style="font-size: 2.5rem; margin-bottom: 0.5rem;">Path-Specific Instructions</h1>
+    <p style="font-size: 1.3rem; color: var(--text-muted);">Different rules for different files</p>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 23:00-23:30 | 30 sec]</strong> copilot-instructions.md applies everywhere. But what if you want Python-specific rules for Python files only? That is path-specific instructions.
+  </div>
+</section>
+<section class="slide" data-slide="15" data-section="path-instructions" data-title="Glob Patterns">
+  <div class="content">
+    <h2>Glob-Based Instruction Targeting</h2>
+    <p class="slide-subtitle">Apply rules to specific file types or directories</p>
+    <div class="columns col-2">
+      <div>
+        <div class="card" style="margin-bottom: 1rem;">
+          <strong style="color: var(--accent);">YAML Frontmatter</strong>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">applyTo field</p>
+        </div>
+        <div class="card" style="margin-bottom: 1rem;">
+          <strong style="color: var(--accent-blue);">Auto-Loaded</strong>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">when editing matching files</p>
+        </div>
+        <div class="card">
+          <strong style="color: var(--success);">Additive</strong>
+          <p style="color: var(--text-muted); font-size: 0.9rem;">adds to global instructions</p>
+        </div>
+      </div>
+      <div>
+        <div style="font-family: var(--font-mono); font-size: 0.85rem; background: var(--bg-tertiary); padding: 1rem; border-radius: 4px;">
+          <div style="color: var(--text-muted);">.github/instructions/</div>
+          <div style="margin-left: 1rem;">
+            <div>python.instructions.md</div>
+            <div style="color: var(--text-muted); margin-left: 0.5rem;">→ **/*.py</div>
+          </div>
+          <div style="margin-left: 1rem;">
+            <div>typescript.instructions.md</div>
+            <div style="color: var(--text-muted); margin-left: 0.5rem;">→ **/*.ts(x)?</div>
+          </div>
+          <div style="margin-left: 1rem;">
+            <div>sql.instructions.md</div>
+            <div style="color: var(--text-muted); margin-left: 0.5rem;">→ **/*.sql</div>
+          </div>
+          <div style="margin-left: 1rem;">
+            <div>testing.instructions.md</div>
+            <div style="color: var(--text-muted); margin-left: 0.5rem;">→ **/*.test.js</div>
+          </div>
+          <div style="margin-left: 1rem;">
+            <div>api.instructions.md</div>
+            <div style="color: var(--text-muted); margin-left: 0.5rem;">→ **/api/**</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="note-bar">
+      Different rules for different file types — automatically applied based on what you are editing
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 23:30-25:00 | 1.5 min]</strong> Path-specific instructions use YAML frontmatter with an applyTo field using glob patterns. A Python test file for an API endpoint could get global + Python + testing + API instructions — all layered automatically.
+  </div>
+</section>
+<section class="slide" data-slide="16" data-section="path-instructions" data-title="Python Example">
+  <div class="content">
+    <h2>Real Example: python.instructions.md</h2>
+    <p class="slide-subtitle">From .github/instructions/python.instructions.md</p>
+    <div class="card">
+      <div style="font-family: var(--font-mono); font-size: 0.9rem; background: var(--bg-tertiary); padding: 1rem; border-radius: 4px;">
+        <div style="color: var(--text-muted);">---</div>
+        <div style="color: var(--code-orange);">applyTo: <span style="color: var(--text);">"**/*.py"</span></div>
+        <div style="color: var(--text-muted);">---</div>
+        <div style="margin-top: 0.5rem;"></div>
+        <div>
+          <div style="color: var(--accent);"># Project coding standards for Python</div>
+          <div>Follow PEP 8</div>
+          <div>Always prioritize readability</div>
+          <div>Write clear comments</div>
+          <div>Ensure descriptive names with type hints</div>
+          <div>Use 4 spaces</div>
+        </div>
+      </div>
+    </div>
+    <div class="note-bar">
+      5 lines of targeted guidance → every Python file gets these rules automatically
+    </div>
+  </div>
+  <div class="slide-notes">
+    <strong>[TIME 25:00-26:00 | 1 min]</strong> Five lines of clear, specific guidance. When you work on ANY Python file in this repo, Copilot knows to use PEP 8, include type hints, and write clear comments.
+  </div>
+</section>
+
+<section class="slide section-slide" data-slide="17" data-section="prompts" data-title="Prompt Files">
+<div class="content">
+<div class="glow-ring"></div>
+<h1 style="font-size: 4rem; margin: 2rem 0;">📝</h1>
+<h1 class="slide-title">Prompt Files</h1>
+<p class="slide-subtitle">Reusable, version-controlled prompt templates</p>
+</div>
+<div class="slide-notes">
+<p>TIME 26:00-26:30 | 30 sec | Prompt files let you save common workflows as reusable templates. Invoke them by name instead of typing the same complex prompt every time.</p>
+</div>
+</section>
+<section class="slide " data-slide="18" data-section="prompts" data-title="React Component Prompt">
+<div class="content">
+<h2>Real Example: create-react-component.prompt.md</h2>
+<p class="slide-subtitle">A reusable prompt with model, tools, and instructions</p>
+<div class="columns col-2">
+<div class="card">
+<h3>YAML Frontmatter</h3>
+<pre class="mono"><code>agent: 'agent'
+model: 'Claude Sonnet 4.5'
+tools:
+  - githubRepo
+  - search/codebase
+description: 'Generate a new React form'</code></pre>
+</div>
+<div class="card">
+<h3>Instructions Body</h3>
+<p>Generate a React form component based on templates in #githubRepo contoso/react-templates.</p>
+<ul class="clean">
+<li>Use design system Form.md</li>
+<li>Use react-hook-form for state</li>
+<li>Define TypeScript types</li>
+<li>Use yup for validation</li>
+</ul>
+</div>
+</div>
+<div class="note-bar">
+<strong>Any team member invokes this prompt → gets a consistent, standards-compliant React component every time</strong>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 26:30-28:00 | 1.5 min | This prompt file specifies agent mode, Claude Sonnet 4.5, specific tools, and detailed requirements. It references an external GitHub repo for templates, requires react-hook-form, TypeScript types, and yup validation. Any developer invokes this and gets a component following ALL standards. Version-controlled, reviewable in PRs, shared across the team.</p>
+</div>
+</section>
+<section class="slide " data-slide="19" data-section="prompts" data-title="ADR Prompt">
+<div class="content">
+<h2>Architecture Decision Records</h2>
+<p class="slide-subtitle">Using prompt files to generate consistent ADRs</p>
+<div class="columns col-2">
+<div class="card">
+<h3>Why ADRs Matter</h3>
+<ul class="clean">
+<li>Document decisions</li>
+<li>Prevent confusion</li>
+<li>New members understand</li>
+<li>AI references</li>
+</ul>
+</div>
+<div class="card">
+<h3>AI-Powered ADRs</h3>
+<ul class="clean">
+<li>Prompt template at docs/adr/</li>
+<li>Consistent format</li>
+<li>Copilot fills rationale</li>
+<li>Version controlled</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 28:00-29:00 | 1 min | Our repo includes an ADR prompt template that generates consistently formatted Architecture Decision Records.</p>
+</div>
+</section>
+<section class="slide section-slide" data-slide="20" data-section="agents" data-title="Custom Agents">
+<div class="content">
+<div class="glow-ring"></div>
+<h1 style="font-size: 4rem; margin: 2rem 0;">🤖</h1>
+<h1 class="slide-title">Custom Agents</h1>
+<p class="slide-subtitle">Purpose-built AI teammates with specialized behavior</p>
+</div>
+<div class="slide-notes">
+<p>TIME 29:00-29:30 | 30 sec | Custom agents take customization to another level. Specialized AI personalities with their own tools, models, and behavioral guidelines.</p>
+</div>
+</section>
+<section class="slide " data-slide="21" data-section="agents" data-title="Azure Architect Agent">
+<div class="content">
+<h2>Azure Principal Architect Agent</h2>
+<p class="slide-subtitle">Expert Azure guidance using Well-Architected Framework</p>
+<div class="columns col-2">
+<div class="card">
+<h3>WAF Pillar Assessment</h3>
+<ul class="clean">
+<li>Security</li>
+<li>Reliability</li>
+<li>Performance</li>
+<li>Cost</li>
+<li>Operations</li>
+</ul>
+</div>
+<div class="card">
+<h3>Methodology</h3>
+<ul class="clean">
+<li>Always fetches latest docs</li>
+<li>Understands requirements</li>
+<li>Asks before assuming</li>
+<li>Assesses trade-offs</li>
+<li>Provides specific configs</li>
+</ul>
+</div>
+</div>
+<div class="note-bar">
+<strong>The fetch tool keeps this agent current with live Microsoft Learn docs in real time</strong>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 29:30-32:00 | 2.5 min | Our Azure Principal Architect agent ALWAYS fetches live documentation from Microsoft Learn before making recommendations. It evaluates every decision against all five Well-Architected Framework pillars. It asks before assuming — if you do not specify RTO or RPO, it asks rather than guessing. A senior architect knowledge encoded as an AI agent, always current via live docs.</p>
+</div>
+</section>
+<section class="slide " data-slide="22" data-section="agents" data-title="Beast Mode Agent">
+<div class="content">
+<h2>Beast Mode 4.1 — Autonomous Agent</h2>
+<p class="slide-subtitle">A fully autonomous, self-directed coding agent</p>
+<div class="columns col-2">
+<div>
+<div class="icon-row">
+<strong>⚡ Fully Autonomous</strong> — never stops early
+</div>
+<div class="icon-row">
+<strong>🔍 Internet Research</strong> — Bing search
+</div>
+<div class="icon-row">
+<strong>✓ Todo List Tracking</strong> — markdown checklist
+</div>
+<div class="icon-row">
+<strong>🧪 Rigorous Testing</strong> — boundary and edge cases
+</div>
+</div>
+<div class="card card-accent">
+<p style="font-size: 1.1rem; font-style: italic; line-height: 1.6;">"You MUST keep working until the problem is completely solved. Do NOT end your turn until you have completed ALL steps and verified everything is working correctly."</p>
+<p style="text-align: right; margin-top: 1rem; font-size: 0.9rem;">— From the 270-line system prompt</p>
+</div>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 32:00-34:00 | 2 min | Beast Mode is our power-user agent for maximum autonomy. It NEVER stops early, researches EVERY library online, maintains a todo list, and tests RIGOROUSLY. 270 lines of crafted system prompt.</p>
+</div>
+</section>
+<section class="slide section-slide" data-slide="23" data-section="governance" data-title="Content Governance">
+<div class="content">
+<div class="glow-ring"></div>
+<h1 style="font-size: 4rem; margin: 2rem 0;">🔒</h1>
+<h1 class="slide-title">Content Governance</h1>
+<p class="slide-subtitle">Control what the AI can see — and what it cannot</p>
+</div>
+<div class="slide-notes">
+<p>TIME 34:00-34:30 | 30 sec | Enterprise governance is where GitHub Copilot provides powerful controls for security and compliance teams.</p>
+</div>
+</section>
+<section class="slide " data-slide="24" data-section="governance" data-title="Content Policies">
+<div class="content">
+<h2>Content Exclusion and Inclusion — How It Works</h2>
+<p class="slide-subtitle">Step-by-step: where to configure and what happens</p>
+<div class="columns col-2">
+<div>
+<div class="card">
+<h3>Where to Configure</h3>
+<ol>
+<li>Go to github.com → Your Organization</li>
+<li>Click Settings → Copilot in sidebar</li>
+<li>Select Content exclusion</li>
+<li>Add repositories and paths</li>
+</ol>
+</div>
+<div class="card">
+<h3>What Happens When Excluded</h3>
+<ul class="clean">
+<li>No completions</li>
+<li>Chat won't use as context</li>
+<li>Agent won't read/modify</li>
+<li>Coding Agent won't include</li>
+<li>Code Review won't analyze</li>
+</ul>
+</div>
+</div>
+<div class="card">
+<div style="border: 2px solid var(--border); border-radius: 8px; overflow: hidden;">
+<div style="background: #333; padding: 8px; display: flex; gap: 8px;">
+<div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f56;"></div>
+<div style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></div>
+<div style="width: 12px; height: 12px; border-radius: 50%; background: #27c93f;"></div>
+</div>
+<div style="background: var(--bg-secondary); padding: 1rem;">
+<p style="font-size: 0.8rem; color: var(--text-muted);">github.com/organizations/contoso/settings/copilot/content_exclusion</p>
+<h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">Content exclusion</h4>
+<div style="margin-top: 1rem;">
+<p style="font-size: 0.85rem; color: var(--text-muted);">Repository</p>
+<input type="text" value="contoso/trade-secrets" readonly style="width: 100%; padding: 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-size: 0.85rem;">
+</div>
+<div style="margin-top: 1rem;">
+<p style="font-size: 0.85rem; color: var(--text-muted);">Paths</p>
+<input type="text" value="**/.env, **/secrets/**, src/proprietary/**" readonly style="width: 100%; padding: 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border); color: var(--text); border-radius: 4px; font-size: 0.85rem;">
+</div>
+<div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+<button style="padding: 0.5rem 1rem; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Save</button>
+<button style="padding: 0.5rem 1rem; background: var(--bg-tertiary); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Cancel</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 34:30-37:00 | 2.5 min | Let me show you exactly WHERE you configure content exclusion. On GitHub.com, go to your organization page, click Settings, in the left sidebar click Copilot, then Content exclusion. You add repositories and glob patterns like **/.env to block all env files. Once saved, the exclusion takes effect across ALL Copilot features — completions, chat, agent mode, coding agent, code review. The exclusion is enforced server-side — developers cannot override it.</p>
+</div>
+</section>
+<section class="slide " data-slide="25" data-section="governance" data-title="Repo Demo Files">
+<div class="content">
+<h2>Content Governance in Our Hackathon Repo</h2>
+<p class="slide-subtitle">Real files demonstrating exclusion and inclusion override</p>
+<div class="columns col-2">
+<div class="card">
+<h3 style="color: #ff6b6b;">Excluded — Copilot Cannot See These</h3>
+<div style="opacity: 0.6; margin: 1rem 0;">
+<p style="font-family: var(--font-mono); font-size: 0.9rem; margin: 0.5rem 0;">📁 content-exclusion/</p>
+<p style="font-family: var(--font-mono); font-size: 0.85rem; margin: 0.3rem 0 0 1rem; color: var(--text-muted);">brown-fox-german.txt</p>
+<p style="font-family: var(--font-mono); font-size: 0.85rem; margin: 0.3rem 0 0 1rem; color: var(--text-muted);">brown-fox-hindi.txt</p>
+<p style="font-family: var(--font-mono); font-size: 0.85rem; margin: 0.3rem 0 0 1rem; color: var(--text-muted);">brown-fox-japanese.txt</p>
+<p style="font-family: var(--font-mono); font-size: 0.85rem; margin: 0.3rem 0 0 1rem; color: var(--text-muted);">generateFibSequence.py</p>
+</div>
+<div class="note-bar">
+<ul class="clean" style="margin: 0; font-size: 0.9rem;">
+<li>No completions</li>
+<li>Not in chat context</li>
+<li>Agent cannot modify</li>
+</ul>
+</div>
+</div>
+<div class="card">
+<h3 style="color: #3fb950;">Included — Override Restores Access</h3>
+<div style="margin: 1rem 0;">
+<p style="font-family: var(--font-mono); font-size: 0.9rem; margin: 0.5rem 0;">📁 content-inclusion/</p>
+<p style="font-family: var(--font-mono); font-size: 0.85rem; margin: 0.3rem 0 0 1rem; color: #3fb950;">✓ brown-fox-hindi.txt</p>
+</div>
+<p style="font-size: 0.9rem; margin-top: 1rem;">The Hindi file exists in BOTH directories — exclusion blocks it, but the inclusion rule overrides that.</p>
+<div class="note-bar">
+<ul class="clean" style="margin: 0; font-size: 0.9rem;">
+<li>Completions restored</li>
+<li>Available in chat</li>
+<li>Agent can access</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 37:00-39:00 | 2 min | Here are actual files in our hackathon repo demonstrating this. On the left, content-exclusion has four files that Copilot cannot see. On the right, the Hindi text file exists in BOTH directories — exclusion blocks it, but the inclusion rule overrides that for just this file. In a real scenario, exclude proprietary-algorithms/ but include shared-utils/ within it.</p>
+</div>
+</section>
+<section class="slide section-slide" data-slide="26" data-section="advanced" data-title="Advanced Configuration">
+<div class="content">
+<div class="glow-ring"></div>
+<h1 style="font-size: 4rem; margin: 2rem 0;">⚙️</h1>
+<h1 class="slide-title">Advanced Configuration</h1>
+<p class="slide-subtitle">Dev containers, the CLI, and putting it all together</p>
+</div>
+<div class="slide-notes">
+<p>TIME 39:00-39:30 | 30 sec | Let us cover a few more features that round out the picture.</p>
+</div>
+</section>
+<section class="slide " data-slide="27" data-section="advanced" data-title="Dev Containers">
+<div class="content">
+<h2>Dev Containers and Codespaces</h2>
+<p class="slide-subtitle">Consistent AI-configured environments for every developer</p>
+<div class="columns col-2">
+<div>
+<div class="icon-row">
+<strong>🔄 Reproducible Environments</strong> — same tools and extensions
+</div>
+<div class="icon-row">
+<strong>☁️ GitHub Codespaces</strong> — cloud-hosted zero setup
+</div>
+<div class="icon-row">
+<strong>✨ Pre-installed Everything</strong> — Copilot extension and linters
+</div>
+</div>
+<div class="card card-accent">
+<h3 style="text-align: center;">Zero to Configured in 30 Seconds</h3>
+<p style="text-align: center; font-size: 1.05rem;">New team members clone the repo, open in Codespaces, and they have a fully configured AI-assisted development environment.</p>
+<div class="note-bar">
+<strong>One .devcontainer.json file powers reproducibility for your entire team</strong>
+</div>
+</div>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 39:30-41:00 | 1.5 min | Dev containers ensure every developer gets the exact same environment. With Codespaces, new team members go from zero to fully configured AI-assisted development in 30 seconds.</p>
+</div>
+</section>
+<section class="slide " data-slide="28" data-section="advanced" data-title="CLI Power">
+<div class="content">
+<h2>The CLI Advantage</h2>
+<p class="slide-subtitle">Terminal-native agentic platform</p>
+<div class="feature-grid">
+<div class="feature-item">
+<strong>/fleet</strong>
+<p>Parallel multi-agent orchestration</p>
+</div>
+<div class="feature-item">
+<strong>/delegate</strong>
+<p>Hand off to cloud coding agent</p>
+</div>
+<div class="feature-item">
+<strong>/research</strong>
+<p>Deep research with citations</p>
+</div>
+<div class="feature-item">
+<strong>--yolo</strong>
+<p>Fully autonomous autopilot mode</p>
+</div>
+<div class="feature-item">
+<strong>hooks</strong>
+<p>Deterministic lifecycle control</p>
+</div>
+<div class="feature-item">
+<strong>plugins</strong>
+<p>Distributable capability packages</p>
+</div>
+<div class="feature-item">
+<strong>instructions</strong>
+<p>Cross-compatible instruction files</p>
+</div>
+<div class="feature-item">
+<strong>LSP</strong>
+<p>Custom language server integration</p>
+</div>
+</div>
+<div class="note-bar">
+<strong>The Copilot CLI is a full platform — hooks, plugins, fleet mode, delegation, and autopilot built in.</strong>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 41:00-43:00 | 2 min | The Copilot CLI is a full platform. Fleet mode for parallel agents, /delegate to hand off to the cloud, hooks for deterministic lifecycle control, plugins for distributable capabilities.</p>
+</div>
+</section>
+<section class="slide section-slide" data-slide="29" data-section="demo" data-title="Live Demo">
+<div class="content">
+<div class="glow-ring"></div>
+<h1 style="font-size: 4rem; margin: 2rem 0;">🚀</h1>
+<h1 class="slide-title">Live Demo</h1>
+<p class="slide-subtitle">Walking through the real repo</p>
+</div>
+<div class="slide-notes">
+<p>TIME 43:00-43:30 | 30 sec | Let us switch from slides to the real repo and see all of this in action.</p>
+</div>
+</section>
+<section class="slide " data-slide="30" data-section="demo" data-title="Demo Walkthrough">
+<div class="content">
+<h2>Demo Walkthrough</h2>
+<p class="slide-subtitle">Step-by-step through the real repo</p>
+<div class="icon-row">
+<strong>1. Open the Repo</strong> — Clone and open in VS Code
+</div>
+<div class="icon-row">
+<strong>2. Show copilot-instructions.md</strong> — Walk through 45KB config
+</div>
+<div class="icon-row">
+<strong>3. Trigger Path Instructions</strong> — Open .py file, show auto-load
+</div>
+<div class="icon-row">
+<strong>4. Run a Prompt File</strong> — Invoke create-react-component
+</div>
+<div class="icon-row">
+<strong>5. Switch to Custom Agent</strong> — Activate Azure Architect
+</div>
+<div class="icon-row">
+<strong>6. Test Content Exclusion</strong> — Reference excluded file, watch refuse
+</div>
+<div class="icon-row">
+<strong>7. CLI Demo</strong> — Open CLI, show /skills, run task
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 43:30-55:00 | 11.5 min | LIVE DEMO. Step 1: Clone and open the repo, show the .github directory. Step 2: Open copilot-instructions.md, scroll through sections. Step 3: Open a Python file, show Python instructions auto-loaded. Step 4: Invoke the React prompt. Step 5: Switch to Azure Architect agent. Step 6: Try to reference an excluded file. Step 7: Open CLI, run /skills.</p>
+</div>
+</section>
+<section class="slide " data-slide="31" data-section="demo" data-title="Key Takeaways">
+<div class="content">
+<h2>Key Takeaways</h2>
+<p class="slide-subtitle">What to do Monday morning</p>
+<div class="columns col-2">
+<div class="card card-green">
+<h3>Start Here (30 min)</h3>
+<ul class="clean">
+<li>Create copilot-instructions.md</li>
+<li>Add 1-2 path instructions</li>
+<li>Create one prompt file</li>
+<li>Set up content exclusion</li>
+</ul>
+</div>
+<div class="card card-blue">
+<h3>Level Up (Week 2)</h3>
+<ul class="clean">
+<li>Build custom agents</li>
+<li>Configure dev containers</li>
+<li>Explore CLI</li>
+<li>Set up org policies</li>
+</ul>
+</div>
+</div>
+<div class="note-bar">
+<strong>Fork github.com/sautalwar/ghcp-hackathon-custom as your starting template</strong>
+</div>
+</div>
+<div class="slide-notes">
+<p>TIME 55:00-58:00 | 3 min | Monday morning: create copilot-instructions.md, add a path instruction file, write one prompt, set up content exclusion. That is 30 minutes for a massive improvement.</p>
+</div>
+</section>
+<section class="slide section-slide" data-slide="32" data-section="demo" data-title="Thank You">
+<div class="content">
+<div class="glow-ring"></div>
+<div class="glow-ring" style="animation-delay: -1.5s;"></div>
+<h1 style="font-size: 5rem; margin: 2rem 0;">🚀</h1>
+<h1 class="slide-title" style="font-size: 3.5rem;">Thank You!</h1>
+<p class="slide-subtitle">Fork the repo and start configuring</p>
+<div class="tool-pills">
+<span class="pill">github.com/sautalwar/ghcp-hackathon-custom</span>
+<span class="pill">docs.github.com/copilot</span>
+<span class="pill" style="background: var(--success); color: white;">agentskills.io</span>
+</div>
+<p style="margin-top: 2rem; font-size: 1.1rem;"><strong>Saurabh Altalwar</strong></p>
+</div>
+<div class="slide-notes">
+<p>TIME 58:00-60:00 | 2 min | Thank you! The repo is at github.com/sautalwar/ghcp-hackathon-custom — fork it. I am happy to take questions.</p>
+</div>
+</section>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  const slides = document.querySelectorAll('.slide');
+  const totalSlides = slides.length;
+  let currentSlide = 0;
+  let overviewMode = false;
+  let notesVisible = false;
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  const progressBar = document.getElementById('progress-bar');
+  const slideCounter = document.getElementById('slide-counter');
+  const speakerNotes = document.getElementById('speaker-notes');
+  const notesContent = document.getElementById('notes-content');
+
+  // ─── BOTTOM NAV DATA ───
+  const sectionNames = {
+    intro: 'Intro',
+    landscape: 'The GitHub Platform',
+    'config-arch': 'Config Architecture',
+    instructions: 'Instructions',
+    'path-instructions': 'Path Instructions',
+    prompts: 'Prompt Files',
+    agents: 'Custom Agents',
+    governance: 'Governance',
+    advanced: 'Advanced',
+    demo: 'Demo'
+  };
+
+  // Parsed section structure: [ { key, name, slides: [{index, title}] } ]
+  let sectionData = [];
+  // Flat array of dot elements indexed by slide index
+  let dotElements = [];
+  // Pill elements indexed by section index
+  let pillElements = [];
+
+  function buildBottomNav() {
+    const pillsContainer = document.getElementById('bottom-nav-pills');
+    const dotsContainer = document.getElementById('bottom-nav-dots');
+    pillsContainer.innerHTML = '';
+    dotsContainer.innerHTML = '';
+
+    const sections = {};
+    const sectionOrder = [];
+
+    slides.forEach(function(slide, i) {
+      var sec = slide.dataset.section;
+      var title = slide.dataset.title;
+      if (!sec || !title) return;
+      if (!sections[sec]) {
+        sections[sec] = [];
+        sectionOrder.push(sec);
+      }
+      sections[sec].push({ index: i, title: title });
+    });
+
+    sectionData = sectionOrder.map(function(key) {
+      return { key: key, name: sectionNames[key] || key, slides: sections[key] };
+    });
+
+    dotElements = new Array(totalSlides);
+    pillElements = [];
+
+    sectionData.forEach(function(sec, secIdx) {
+      // Create pill
+      var pill = document.createElement('div');
+      pill.className = 'bnav-pill';
+      pill.textContent = sec.name;
+      pill.dataset.section = sec.key;
+      pill.addEventListener('click', function() {
+        goToSlide(sec.slides[0].index);
+      });
+      // Hover: brighten dots in this section
+      pill.addEventListener('mouseenter', function() {
+        sec.slides.forEach(function(s) {
+          if (dotElements[s.index]) {
+            dotElements[s.index].style.background = 'rgba(139, 92, 246, 0.55)';
+          }
+        });
+      });
+      pill.addEventListener('mouseleave', function() {
+        updateBottomNav(); // restore correct dot states
+      });
+      pillsContainer.appendChild(pill);
+      pillElements.push(pill);
+
+      // Create dots for this section
+      sec.slides.forEach(function(slideInfo, dotIdx) {
+        var dot = document.createElement('div');
+        dot.className = 'bnav-dot';
+        dot.dataset.slideIndex = slideInfo.index;
+        dot.dataset.section = sec.key;
+        // Last dot in section group gets gap
+        if (dotIdx === sec.slides.length - 1 && secIdx < sectionData.length - 1) {
+          dot.classList.add('section-gap');
+        }
+        dot.addEventListener('click', function() {
+          goToSlide(slideInfo.index);
+        });
+        // Tooltip
+        dot.addEventListener('mouseenter', function(e) {
+          showDotTooltip(slideInfo.title, e.target);
+        });
+        dot.addEventListener('mouseleave', function() {
+          hideDotTooltip();
+        });
+        dotsContainer.appendChild(dot);
+        dotElements[slideInfo.index] = dot;
+      });
+    });
+  }
+
+  function updateBottomNav() {
+    if (!slides[currentSlide]) return;
+    var currentSection = slides[currentSlide].dataset.section;
+
+    // Update pills
+    pillElements.forEach(function(pill) {
+      pill.classList.toggle('active', pill.dataset.section === currentSection);
+    });
+
+    // Update dots
+    for (var i = 0; i < totalSlides; i++) {
+      var dot = dotElements[i];
+      if (!dot) continue;
+      dot.classList.remove('current', 'section-active');
+      dot.style.background = ''; // clear any inline style from hover
+      if (i === currentSlide) {
+        dot.classList.add('current');
+      } else if (dot.dataset.section === currentSection) {
+        dot.classList.add('section-active');
+      }
+    }
+  }
+
+  var tooltipEl = document.getElementById('dot-tooltip');
+
+  function showDotTooltip(text, dotEl) {
+    tooltipEl.textContent = text;
+    var rect = dotEl.getBoundingClientRect();
+    tooltipEl.style.left = (rect.left + rect.width / 2) + 'px';
+    tooltipEl.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    tooltipEl.classList.add('visible');
+  }
+
+  function hideDotTooltip() {
+    tooltipEl.classList.remove('visible');
+  }
+
+  function updateUI() {
+    // Update progress bar
+    const progress = ((currentSlide + 1) / totalSlides) * 100;
+    progressBar.style.width = progress + '%';
+
+    // Update counter
+    slideCounter.textContent = (currentSlide + 1) + ' / ' + totalSlides;
+
+    // Update slides
+    slides.forEach((slide, i) => {
+      slide.classList.remove('active', 'prev');
+      if (i === currentSlide) {
+        slide.classList.add('active');
+      } else if (i < currentSlide) {
+        slide.classList.add('prev');
+      }
+    });
+
+    // Update speaker notes
+    const notesEl = slides[currentSlide].querySelector('.slide-notes');
+    const slideKey = 'notes-slide-' + currentSlide;
+    const saved = localStorage.getItem(slideKey);
+    if (saved !== null) {
+      notesContent.textContent = saved;
+    } else if (notesEl) {
+      notesContent.textContent = notesEl.textContent;
+    } else {
+      notesContent.textContent = '';
+    }
+
+    // Update bottom nav highlight
+    updateBottomNav();
+  }
+
+  function goToSlide(index) {
+    if (index < 0) index = 0;
+    if (index >= totalSlides) index = totalSlides - 1;
+    currentSlide = index;
+    updateUI();
+  }
+
+  function nextSlide() {
+    if (currentSlide < totalSlides - 1) {
+      goToSlide(currentSlide + 1);
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 0) {
+      goToSlide(currentSlide - 1);
+    }
+  }
+
+  function toggleOverview() {
+    overviewMode = !overviewMode;
+    document.body.classList.toggle('overview', overviewMode);
+    if (!overviewMode) {
+      updateUI();
+    }
+  }
+
+  function toggleNotes() {
+    notesVisible = !notesVisible;
+    speakerNotes.classList.toggle('visible', notesVisible);
+    if (notesVisible) notesContent.focus();
+  }
+
+  // --- Notes editing: auto-save to localStorage + sync to DOM ---
+  let saveTimeout = null;
+  const notesStatus = document.getElementById('notes-status');
+
+  function saveCurrentNotes() {
+    const text = notesContent.textContent;
+    const key = 'notes-slide-' + currentSlide;
+    localStorage.setItem(key, text);
+    // Sync back into the slide's .slide-notes element
+    let notesEl = slides[currentSlide].querySelector('.slide-notes');
+    if (!notesEl) {
+      notesEl = document.createElement('div');
+      notesEl.className = 'slide-notes';
+      slides[currentSlide].appendChild(notesEl);
+    }
+    notesEl.textContent = text;
+    // Flash save indicator
+    notesStatus.textContent = '✓ Saved';
+    notesStatus.classList.add('show');
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => notesStatus.classList.remove('show'), 1500);
+  }
+
+  notesContent.addEventListener('input', function() {
+    notesStatus.textContent = '● Typing…';
+    notesStatus.classList.add('show');
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveCurrentNotes, 600);
+  });
+
+  // Export full HTML with notes baked in
+  document.getElementById('btn-save-html').addEventListener('click', function() {
+    // Flush any pending save
+    saveCurrentNotes();
+    // Build a clean copy of the document with notes embedded
+    const clone = document.documentElement.cloneNode(true);
+    // Remove runtime state classes
+    clone.querySelector('body').classList.remove('overview');
+    // Reset slides to show slide 0 as active
+    clone.querySelectorAll('.slide').forEach((s, i) => {
+      s.classList.remove('active', 'prev');
+      if (i === 0) s.classList.add('active');
+    });
+    // Remove speaker notes visible state
+    const spNotes = clone.querySelector('#speaker-notes');
+    if (spNotes) spNotes.classList.remove('visible');
+    // Clear contenteditable runtime content (notes are in .slide-notes divs)
+    const nc = clone.querySelector('#notes-content');
+    if (nc) nc.textContent = '';
+    // Clear localStorage keys from export (they live in the .slide-notes divs now)
+    const html = '<!DOCTYPE html>\n<html lang="en">\n' + clone.innerHTML + '\n</html>';
+    const blob = new Blob([html], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'presentation.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    notesStatus.textContent = '⬇ Exported!';
+    notesStatus.classList.add('show');
+    setTimeout(() => notesStatus.classList.remove('show'), 2000);
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', function(e) {
+    if (overviewMode && e.key === 'Escape') {
+      toggleOverview();
+      return;
+    }
+
+    switch(e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case ' ':
+      case 'PageDown':
+        e.preventDefault();
+        nextSlide();
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        prevSlide();
+        break;
+      case 'Home':
+        e.preventDefault();
+        goToSlide(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        goToSlide(totalSlides - 1);
+        break;
+      case 'Escape':
+        toggleOverview();
+        break;
+      case 'n':
+      case 'N':
+        toggleNotes();
+        break;
+    }
+  });
+
+  // Click in overview mode
+  document.addEventListener('click', function(e) {
+    if (!overviewMode) return;
+    const slide = e.target.closest('.slide');
+    if (slide) {
+      const index = parseInt(slide.dataset.slide);
+      goToSlide(index);
+      toggleOverview();
+    }
+  });
+
+  // Touch / swipe support
+  document.addEventListener('touchstart', function(e) {
+    if (overviewMode) return;
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function(e) {
+    if (overviewMode) return;
+    const touchEndX = e.changedTouches[0].screenX;
+    const touchEndY = e.changedTouches[0].screenY;
+    const deltaX = touchEndX - touchStartX;
+    const deltaY = touchEndY - touchStartY;
+
+    // Only trigger if horizontal swipe is dominant
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+      if (deltaX < 0) {
+        nextSlide();
+      } else {
+        prevSlide();
+      }
+    }
+  }, { passive: true });
+
+  // Build bottom nav
+  buildBottomNav();
+
+  // Hash navigation
+  function handleHash() {
+    const hash = window.location.hash;
+    if (hash) {
+      const num = parseInt(hash.replace('#', ''));
+      if (!isNaN(num) && num >= 1 && num <= totalSlides) {
+        goToSlide(num - 1);
+      }
+    }
+  }
+
+  window.addEventListener('hashchange', handleHash);
+
+  // Initialize
+  // ─── Agenda loader ───
+  (function loadAgenda() {
+    fetch('agenda.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var tabsEl = document.getElementById('agenda-tabs');
+        var daysEl = document.getElementById('agenda-days');
+        if (!tabsEl || !daysEl) return;
+
+        data.days.forEach(function(day, idx) {
+          // Tab
+          var tab = document.createElement('div');
+          tab.className = 'agenda-tab' + (idx === 0 ? ' active' : '');
+          tab.textContent = day.name;
+          tab.addEventListener('click', function() {
+            tabsEl.querySelectorAll('.agenda-tab').forEach(function(t) { t.classList.remove('active'); });
+            daysEl.querySelectorAll('.agenda-day').forEach(function(d) { d.classList.remove('active'); });
+            tab.classList.add('active');
+            document.getElementById('agenda-day-' + idx).classList.add('active');
+          });
+          tabsEl.appendChild(tab);
+
+          // Day content
+          var dayDiv = document.createElement('div');
+          dayDiv.className = 'agenda-day' + (idx === 0 ? ' active' : '');
+          dayDiv.id = 'agenda-day-' + idx;
+
+          if (day.subtitle) {
+            var sub = document.createElement('div');
+            sub.className = 'agenda-day-subtitle';
+            sub.textContent = day.subtitle;
+            dayDiv.appendChild(sub);
+          }
+
+          day.blocks.forEach(function(block) {
+            var item = document.createElement('div');
+            item.className = 'agenda-item type-' + block.type;
+
+            var icon = document.createElement('div');
+            icon.className = 'agenda-icon';
+            icon.textContent = block.icon || '';
+
+            var time = document.createElement('div');
+            time.className = 'agenda-time';
+            time.textContent = block.time;
+
+            var details = document.createElement('div');
+            details.className = 'agenda-details';
+
+            var title = document.createElement('div');
+            title.className = 'agenda-title';
+            title.textContent = block.title;
+            details.appendChild(title);
+
+            if (block.description) {
+              var desc = document.createElement('div');
+              desc.className = 'agenda-desc';
+              desc.textContent = block.description;
+              details.appendChild(desc);
+            }
+
+            if (block.labUrl) {
+              var link = document.createElement('a');
+              link.className = 'agenda-link';
+              link.href = block.labUrl;
+              link.target = '_blank';
+              link.innerHTML = '🔗 Open Lab Repository';
+              details.appendChild(link);
+            }
+
+            if (block.section) {
+              var secLink = document.createElement('div');
+              secLink.className = 'agenda-section-link';
+              secLink.innerHTML = '→ Jump to slides';
+              secLink.addEventListener('click', function() {
+                var target = document.querySelector('.slide[data-section="' + block.section + '"]');
+                if (target) {
+                  var allSlides = Array.from(document.querySelectorAll('.slide'));
+                  var targetIdx = allSlides.indexOf(target);
+                  if (targetIdx >= 0) goToSlide(targetIdx);
+                }
+              });
+              details.appendChild(secLink);
+            }
+
+            item.appendChild(icon);
+            item.appendChild(time);
+            item.appendChild(details);
+            dayDiv.appendChild(item);
+          });
+
+          daysEl.appendChild(dayDiv);
+        });
+      })
+      .catch(function(err) {
+        console.warn('Could not load agenda.json:', err);
+      });
+  })();
+
+  handleHash();
+  updateUI();
+})();
+</script>
+
+</body>
+</html>
