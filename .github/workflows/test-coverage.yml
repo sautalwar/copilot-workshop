@@ -1,0 +1,113 @@
+# =============================================================================
+# Test Coverage Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Ensures that every pull request maintains a minimum level of test coverage.
+#   Coverage metrics tell you "what percentage of your code is actually executed
+#   by tests." Low coverage = more room for hidden bugs.
+#
+# WHAT IT DOES:
+#   1. Runs all tests with JaCoCo coverage instrumentation
+#   2. Checks coverage against minimum thresholds
+#   3. Posts a coverage summary directly on the PR as a comment
+#      (so reviewers can see coverage at a glance, no clicking around)
+#
+# COVERAGE THRESHOLDS:
+#   - 70% overall: A pragmatic baseline. 100% is unrealistic and leads to
+#     low-value tests. 70% catches most critical paths.
+#   - 80% for changed files: Higher bar for NEW code. If you're writing new
+#     code today, it should be well-tested. Legacy code gets slack.
+#
+# HOW JACOCO WORKS:
+#   JaCoCo (Java Code Coverage) instruments bytecode at build time to track
+#   which lines, branches, and methods are executed during tests. It produces
+#   XML and HTML reports that show exactly which code paths have test coverage.
+#   The Maven plugin is configured in pom.xml — the 'mvn verify' command
+#   triggers both test execution and coverage report generation.
+#
+# HOW TO CUSTOMIZE:
+#   - Change min-coverage-overall and min-coverage-changed-files below
+#   - Configure JaCoCo exclusions in pom.xml (e.g., exclude generated code)
+#   - The PR comment is powered by madrapps/jacoco-report — see its docs
+#     for additional formatting options
+#
+# PREREQUISITES:
+#   Add the jacoco-maven-plugin to your pom.xml. Minimal config:
+#     <plugin>
+#       <groupId>org.jacoco</groupId>
+#       <artifactId>jacoco-maven-plugin</artifactId>
+#       <version>0.8.11</version>
+#       <executions>
+#         <execution><goals><goal>prepare-agent</goal></goals></execution>
+#         <execution><id>report</id><phase>verify</phase>
+#           <goals><goal>report</goal></goals>
+#         </execution>
+#       </executions>
+#     </plugin>
+# =============================================================================
+
+name: Test Coverage
+
+# Only run on PRs targeting main — coverage checks are most useful during review
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  coverage:
+    name: JaCoCo Coverage Check
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the PR code
+      - uses: actions/checkout@v4
+
+      # Step 2: Set up Java with Maven caching for faster builds
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Run the full test suite with coverage instrumentation
+      # 'mvn verify' runs compile → test → integration-test → verify phases.
+      # The JaCoCo agent attaches to the JVM during tests and records which
+      # bytecode instructions are executed. After tests complete, it writes
+      # the coverage data to target/site/jacoco/jacoco.xml.
+      - name: Run Tests with Coverage
+        run: mvn verify -B
+
+      # Step 4: Verify the coverage report was generated
+      # This is a sanity check — if JaCoCo isn't configured in pom.xml,
+      # we want to know about it rather than silently skipping coverage.
+      - name: Check Coverage Threshold
+        run: |
+          echo "Checking JaCoCo coverage report..."
+          # JaCoCo Maven plugin enforces minimums in pom.xml
+          # This step makes coverage status visible in the workflow log
+          if [ -f target/site/jacoco/index.html ]; then
+            echo "✅ Coverage report generated at target/site/jacoco/"
+          else
+            echo "⚠️  No JaCoCo report found. Is jacoco-maven-plugin configured in pom.xml?"
+          fi
+
+      # Step 5: Post coverage as a PR comment
+      # WHY THIS MATTERS: Developers shouldn't have to dig through build logs
+      # to find coverage numbers. This action posts a formatted table directly
+      # on the PR showing overall coverage and per-file coverage for changed
+      # files. Reviewers can instantly see if new code is well-tested.
+      #
+      # The comment updates on each push — it doesn't create duplicate comments.
+      - name: Post Coverage to PR
+        if: github.event_name == 'pull_request'
+        uses: madrapps/jacoco-report@v1.7.1
+        with:
+          paths: target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # 70% overall — pragmatic minimum for the whole project
+          min-coverage-overall: 70
+          # 80% for files changed in this PR — higher bar for new code
+          min-coverage-changed-files: 80
+          # Title shown on the PR comment
+          title: "📊 Test Coverage Report"

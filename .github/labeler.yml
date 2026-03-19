@@ -1,0 +1,80 @@
+# =============================================================================
+# PR Auto-Labeler Configuration
+# =============================================================================
+#
+# This file defines rules for automatically labeling pull requests based on
+# which files were changed. Used by the actions/labeler@v5 action in
+# .github/workflows/pr-automation.yml.
+#
+# FORMAT:
+#   label-name:
+#     - changed-files:
+#       - any-glob-to-any-file: 'pattern'
+#
+# Each label is applied if ANY file in the PR matches the glob pattern.
+# Multiple patterns under a single label use OR logic (match any).
+#
+# HOW TO ADD A NEW LABEL:
+#   1. Add a new entry below with your label name and file patterns
+#   2. Create the label in GitHub (Settings → Labels) with a color
+#   3. The workflow will auto-create labels if they don't exist
+#
+# TIP: Test your glob patterns at https://globster.xyz/
+# =============================================================================
+
+# Java source code changes
+java:
+  - changed-files:
+    - any-glob-to-any-file: 'src/**/*.java'
+
+# Test files — helps reviewers know this PR includes/modifies tests
+tests:
+  - changed-files:
+    - any-glob-to-any-file: 'src/test/**'
+
+# API layer — controllers define the public API surface
+api:
+  - changed-files:
+    - any-glob-to-any-file: 'src/main/**/controller/**'
+
+# Configuration changes — YAML, properties, GitHub settings
+config:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'
+      - '*.yml'
+      - '*.yaml'
+      - '*.properties'
+
+# MCP server changes — the Node.js Model Context Protocol server
+mcp:
+  - changed-files:
+    - any-glob-to-any-file: 'mcp-server/**'
+
+# Dependency updates — pom.xml or package.json changes
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'pom.xml'
+      - 'mcp-server/package.json'
+
+# Documentation changes
+docs:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'docs/**'
+
+# Security-related file changes
+security:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/workflows/codeql.yml'
+      - '.github/workflows/secret-scanning.yml'
+      - 'SECURITY.md'
+      - '.gitleaks.toml'
+
+# CI/CD workflow changes
+ci:
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/**'

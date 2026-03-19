@@ -1,0 +1,184 @@
+# =============================================================================
+# CodeQL Analysis Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   CodeQL is GitHub's semantic code analysis engine. It treats your source code
+#   as data and runs queries against it to find security vulnerabilities, bugs,
+#   and code quality issues — BEFORE they reach production.
+#
+# WHY THIS MATTERS:
+#   Static analysis catches vulnerabilities that unit tests miss:
+#   - SQL injection (even through complex call chains)
+#   - Cross-site scripting (XSS)
+#   - Path traversal attacks
+#   - Server-side request forgery (SSRF)
+#   - Hardcoded credentials
+#   - Insecure deserialization (critical for Java)
+#   - Spring Boot misconfigurations (exposed actuator endpoints, missing CSRF)
+#
+# HOW IT WORKS:
+#   1. CodeQL builds your Java project to understand the full code structure
+#   2. It creates a database of your code's semantic model
+#   3. It runs security queries against that database
+#   4. Results appear in the Security tab → Code scanning alerts
+#
+# REQUIREMENTS:
+#   - GitHub Advanced Security (GHAS) license for private repos
+#   - Free for public repos
+#   - Actions must be enabled on the repository
+#
+# =============================================================================
+
+name: "CodeQL Analysis"
+
+# --- TRIGGER CONFIGURATION ---
+# We run CodeQL on three occasions:
+on:
+  push:
+    branches: [main]
+    # Scans main branch on every push to catch issues that slip through PRs.
+    # This is your "last line of defense" — if something gets merged, we still
+    # catch it here.
+
+  pull_request:
+    branches: [main]
+    # Scans every PR targeting main. This is the PRIMARY feedback loop —
+    # developers see CodeQL alerts directly in their PR diff.
+    # CodeQL only analyzes the changed files + their dependencies, so PR scans
+    # are faster than full-repo scans.
+
+  schedule:
+    - cron: '0 6 * * 1'
+    # Weekly full scan every Monday at 6:00 AM UTC.
+    # WHY: New vulnerability patterns are added to CodeQL regularly. A weekly
+    # scan catches vulnerabilities in OLD code that weren't detectable before.
+    # Think of it as a recurring security audit — even if you haven't changed
+    # anything, the scanner has gotten smarter.
+
+jobs:
+  analyze:
+    name: Analyze Java
+    runs-on: ubuntu-latest
+
+    # --- PERMISSIONS ---
+    # These are the MINIMUM permissions CodeQL needs. Following the principle
+    # of least privilege — the workflow can only do what it absolutely must.
+    permissions:
+      actions: read       # Required to read workflow artifacts and caches
+      contents: read      # Required to checkout the repository code
+      security-events: write  # Required to upload CodeQL results (SARIF format)
+                              # to the Security tab. Without this, the analysis
+                              # runs but results are silently discarded.
+
+    # --- MATRIX STRATEGY ---
+    # fail-fast: false means if one language fails, others still run.
+    # For a Java-only project this isn't critical, but it's best practice
+    # in case you add JavaScript/TypeScript later (e.g., for your MCP server).
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['java-kotlin']
+        # 'java-kotlin' covers both Java and Kotlin source files.
+        # CodeQL supports: javascript, python, ruby, go, csharp, cpp, java-kotlin, swift
+        # If you add a Node.js MCP server, add 'javascript' to this list.
+
+    steps:
+      # --- STEP 1: Checkout code ---
+      # Standard checkout. CodeQL needs the full source tree to build
+      # its semantic database.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --- STEP 2: Set up Java ---
+      # CodeQL needs to COMPILE your Java code to understand it fully.
+      # Unlike JavaScript (which CodeQL can analyze without building),
+      # Java requires a successful build to trace data flow through
+      # compiled bytecode.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          # Temurin is the Eclipse Adoptium distribution — free, well-maintained,
+          # and TCK-certified. It's the standard choice for CI/CD.
+
+      # --- STEP 3: Initialize CodeQL ---
+      # This step creates the CodeQL database and sets up tracing.
+      # The "tracing" part is key — CodeQL instruments the build process
+      # to capture every compilation step.
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+          # QUERY SUITES — This is where you control scan depth:
+          #
+          # "security-extended":
+          #   All default security queries PLUS additional queries that may
+          #   have slightly higher false-positive rates but catch more issues.
+          #   Includes checks for:
+          #   - SQL injection (including through ORM layers)
+          #   - LDAP injection
+          #   - XML external entity (XXE) attacks
+          #   - Insecure TLS configuration
+          #   - Spring-specific security issues
+          #
+          # "security-and-quality":
+          #   Everything above PLUS code quality queries:
+          #   - Dead code
+          #   - Redundant null checks
+          #   - Resource leaks (unclosed streams, connections)
+          #   - Thread safety issues
+          #
+          # The "+" prefix means APPEND to default queries (don't replace them).
+          queries: +security-extended,security-and-quality
+
+      # --- STEP 4: Build the project ---
+      # CodeQL traces this build to understand your code's structure.
+      # We skip tests (-DskipTests) because:
+      # 1. CodeQL only needs compiled classes, not test results
+      # 2. Tests are run in a separate CI job (ci.yml)
+      # 3. This makes the CodeQL job faster
+      #
+      # -B enables Maven "batch mode" (non-interactive, cleaner CI output)
+      - name: Build with Maven
+        run: mvn clean compile -DskipTests -B
+
+      # --- STEP 5: Run the analysis ---
+      # This is where CodeQL actually runs its queries against the database
+      # built during the compile step. Results are uploaded as SARIF
+      # (Static Analysis Results Interchange Format) to GitHub.
+      #
+      # The "category" helps distinguish results when you have multiple
+      # languages — each gets its own category in the Security tab.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+# =============================================================================
+# UNDERSTANDING RESULTS
+# =============================================================================
+#
+# After this workflow runs, check results at:
+#   Repository → Security tab → Code scanning alerts
+#
+# Each alert shows:
+#   - Severity (Critical, High, Medium, Low)
+#   - CWE identifier (Common Weakness Enumeration)
+#   - Data flow path (how tainted data moves through your code)
+#   - Suggested fix
+#
+# TRIAGING ALERTS:
+#   1. Critical/High → Fix immediately, block the PR
+#   2. Medium → Fix in current sprint
+#   3. Low → Track in backlog
+#   4. False positive → Dismiss with reason (CodeQL learns from dismissals)
+#
+# COPILOT AUTOFIX (if GHAS is available):
+#   GitHub Copilot can automatically generate fixes for CodeQL alerts.
+#   Look for the "Autofix" button on each alert — it generates a PR
+#   with the suggested fix that you can review and merge.
+#
+# =============================================================================

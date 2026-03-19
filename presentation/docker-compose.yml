@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # Spring Boot Order Management API
+  workshop-api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/api/orders"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Nginx-served HTML presentation slides
+  workshop-slides:
+    build:
+      context: ..
+      dockerfile: presentation/Dockerfile
+    ports:
+      - "8081:80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

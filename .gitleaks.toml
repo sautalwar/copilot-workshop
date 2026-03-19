@@ -1,0 +1,165 @@
+# =============================================================================
+# Gitleaks Configuration
+# =============================================================================
+#
+# PURPOSE:
+#   Custom rules and allowlists for the Gitleaks secret scanner.
+#   This file complements the built-in rules with patterns specific to
+#   Java/Spring Boot projects and your organization's secret formats.
+#
+# HOW IT WORKS:
+#   - Gitleaks checks every file and git commit against these rules
+#   - Each rule has a regex pattern that matches potential secrets
+#   - The allowlist section excludes known false positives
+#   - Rules are additive — custom rules ADD to the built-in defaults
+#
+# BUILT-IN RULES (always active):
+#   Gitleaks includes 100+ built-in rules for common secret patterns:
+#   - AWS access keys, secret keys
+#   - GitHub tokens (PAT, OAuth, App)
+#   - Generic API keys and passwords
+#   - Private keys (RSA, SSH, PGP)
+#   - Slack, Stripe, Twilio tokens
+#   - Database connection strings
+#   See: https://github.com/gitleaks/gitleaks#rules
+#
+# =============================================================================
+
+title = "Gitleaks Configuration for OutFront Media"
+
+# =============================================================================
+# CUSTOM RULES
+# =============================================================================
+# These rules catch patterns specific to Java/Spring Boot applications
+# that the built-in rules might miss.
+
+# --- JDBC Connection Strings ---
+# Catches JDBC URLs with embedded passwords.
+# Example matches:
+#   jdbc:postgresql://host:5432/db?user=admin&password=secret123
+#   jdbc:mysql://host/db?password=mypass
+[[rules]]
+  id = "jdbc-connection-string-with-password"
+  description = "JDBC connection string containing a password parameter"
+  regex = '''jdbc:[a-zA-Z0-9+]+:\/\/[^\s]*password=[^\s&"']+'''
+  tags = ["jdbc", "database", "java"]
+
+# --- Spring Boot Properties with Passwords ---
+# Catches Spring configuration properties that set passwords inline.
+# Example matches:
+#   spring.datasource.password=mysecretpassword
+#   spring.security.user.password=admin123
+#   spring.mail.password=emailpass
+[[rules]]
+  id = "spring-boot-password-property"
+  description = "Spring Boot property containing a password value"
+  regex = '''spring\.[a-zA-Z.]+password\s*=\s*[^\s$\{]+'''
+  tags = ["spring", "java", "password"]
+
+# --- Spring Boot Properties with Secrets/Keys ---
+# Catches Spring configuration properties that set secrets or API keys inline.
+# Example matches:
+#   spring.security.oauth2.client.registration.*.client-secret=abc123
+#   app.api-key=sk-abc123def456
+[[rules]]
+  id = "spring-boot-secret-property"
+  description = "Spring Boot property containing a secret or API key"
+  regex = '''(secret|api[_-]?key)\s*=\s*[a-zA-Z0-9/+=]{8,}'''
+  tags = ["spring", "java", "secret"]
+
+# --- AWS Credentials in Properties Files ---
+# Catches AWS access keys or secret keys set in Java properties or YAML.
+# Example matches:
+#   aws.accessKeyId=AKIAIOSFODNN7EXAMPLE
+#   aws.secretKey=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+[[rules]]
+  id = "aws-credentials-in-properties"
+  description = "AWS credentials in properties or configuration files"
+  regex = '''aws\.(access[_-]?key|secret[_-]?key|session[_-]?token)\s*=\s*[A-Za-z0-9/+=]{16,}'''
+  tags = ["aws", "credentials"]
+
+# --- Hardcoded Bearer Tokens ---
+# Catches Authorization headers with hardcoded Bearer tokens.
+# Example matches:
+#   Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+#   "Authorization", "Bearer sk-abc123..."
+[[rules]]
+  id = "hardcoded-bearer-token"
+  description = "Hardcoded Bearer token in source code"
+  regex = '''[Bb]earer\s+[a-zA-Z0-9\-_.~+/]{20,}'''
+  tags = ["token", "bearer", "auth"]
+
+# --- Jira API Tokens ---
+# Catches Jira API tokens that might be hardcoded.
+# Jira Cloud API tokens are base64-encoded strings.
+# Example: ATATT3xFfGF0... (Atlassian API tokens start with ATATT)
+[[rules]]
+  id = "jira-api-token"
+  description = "Atlassian/Jira API token"
+  regex = '''ATATT[a-zA-Z0-9\-_]{20,}'''
+  tags = ["jira", "atlassian", "token"]
+
+# =============================================================================
+# ALLOWLIST — False Positive Suppression
+# =============================================================================
+# These patterns are excluded from scanning to reduce noise.
+# Be VERY careful adding allowlists — each one is a potential blind spot.
+
+[allowlist]
+  description = "Global allowlist for known false positives"
+
+  # --- Files to skip ---
+  # Test files may contain example/dummy secrets for testing.
+  # Documentation may reference secret patterns in examples.
+  paths = [
+    '''(^|/)test/''',
+    '''(^|/)tests/''',
+    '''src/test/''',
+    '''\.md$''',
+    '''\.example$''',
+    '''\.sample$''',
+    '''\.template$''',
+    '''package-lock\.json$''',
+    '''pom\.xml$''',
+    '''\.gitleaks\.toml$''',
+  ]
+
+  # --- Regex patterns to ignore ---
+  # These match known false positives that Gitleaks commonly flags.
+  regexes = [
+    # Ignore placeholder/template values
+    '''password\s*=\s*\$\{.*\}''',           # ${DB_PASSWORD} — environment variable reference
+    '''password\s*=\s*<.*>''',               # <your-password-here> — placeholder
+    '''password\s*=\s*["']?\s*$''',           # password= (empty value)
+    '''password\s*=\s*["']password["']''',    # password=password (obviously not real)
+    '''password\s*=\s*["']changeme["']''',    # password=changeme (placeholder)
+    '''password\s*=\s*["']TODO["']''',        # password=TODO (placeholder)
+    '''password\s*=\s*["']xxx+["']''',        # password=xxxx (redacted)
+
+    # Ignore Spring Boot profile-based property resolution
+    '''spring\..*=\s*\$\{.*\}''',             # spring.datasource.password=${DB_PASS}
+
+    # Ignore Maven/Gradle property references
+    '''=\s*\$\{[a-zA-Z._-]+\}''',            # =${env.SECRET_KEY}
+  ]
+
+# =============================================================================
+# EXTENDING THIS CONFIGURATION
+# =============================================================================
+#
+# To add new rules:
+#   1. Identify the secret pattern (what does it look like?)
+#   2. Write a regex that matches it
+#   3. Test the regex against known examples
+#   4. Add a [[rules]] block above
+#
+# To suppress false positives:
+#   1. Add a path pattern to allowlist.paths (for entire files)
+#   2. Add a regex to allowlist.regexes (for specific patterns)
+#   3. Or add `# gitleaks:allow` comment on the specific line in code
+#
+# To test locally:
+#   gitleaks detect --source . --verbose
+#   gitleaks detect --source . --config .gitleaks.toml --verbose
+#
+# =============================================================================

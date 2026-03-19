@@ -1,0 +1,124 @@
+# =============================================================================
+# Release Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Automates the release process so that creating a release is as simple as
+#   pushing a Git tag. No manual JAR building, no copy-pasting changelogs,
+#   no forgetting to attach artifacts. Tag it and ship it.
+#
+# WHAT IT DOES:
+#   1. Builds the production JAR artifact
+#   2. Auto-generates release notes from commit history since the last tag
+#   3. Creates a GitHub Release with the JAR attached
+#   4. GitHub's built-in release notes generator adds contributor info
+#
+# SEMANTIC VERSIONING CONVENTION:
+#   This workflow triggers on tags matching 'v*' (e.g., v1.0.0, v2.1.3).
+#   Follow Semantic Versioning (https://semver.org/):
+#     - v1.0.0 → Major: Breaking API changes
+#     - v1.1.0 → Minor: New features, backward compatible
+#     - v1.1.1 → Patch: Bug fixes, backward compatible
+#
+# HOW TO TRIGGER:
+#   # Create a tag and push it — the workflow does the rest
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+#   # Or create an annotated tag with a message
+#   git tag -a v1.0.0 -m "First stable release"
+#   git push origin v1.0.0
+#
+# WHY AUTOMATED RELEASES MATTER:
+#   - Consistency: Every release follows the same process
+#   - Traceability: Every release links back to its commits and tag
+#   - Speed: No manual steps = faster release cycles
+#   - Reliability: No "oops, I built with the wrong branch" mistakes
+#   - Audit trail: GitHub Releases provide a permanent record
+#
+# HOW TO CUSTOMIZE:
+#   - Change the release body template in the 'Create GitHub Release' step
+#   - Add additional artifacts (e.g., Docker images, checksums)
+#   - Add deployment steps after the release is created
+#   - Add pre-release support for tags like v1.0.0-rc.1
+# =============================================================================
+
+name: Release
+
+# Trigger ONLY when a tag starting with 'v' is pushed
+# Examples: v1.0.0, v2.3.1, v0.1.0-beta
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+
+    # This job needs permission to create releases (write to repo contents)
+    permissions:
+      contents: write
+
+    steps:
+      # Step 1: Check out with full history
+      # fetch-depth: 0 fetches ALL commits, not just the latest.
+      # We need the full history to generate release notes from commits
+      # between the previous tag and this one.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: Set up Java for building the release JAR
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Build the production-ready JAR
+      # -DskipTests because tests should have already passed in CI on the
+      # branch before it was tagged. No need to run them again.
+      - name: Build Release Artifact
+        run: mvn clean package -DskipTests -B
+
+      # Step 4: Generate release notes from Git commit history
+      # This creates a bullet-point list of all commits between the previous
+      # tag and the current one. Format: "- commit message (short SHA)"
+      # If there's no previous tag (first release), it shows the last 10 commits.
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          # Find the previous tag to calculate the diff
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "📋 Generating notes from $PREV_TAG to ${{ github.ref_name }}"
+            NOTES=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD)
+          else
+            echo "📋 First release — showing last 10 commits"
+            NOTES=$(git log --pretty=format:"- %s (%h)" HEAD~10..HEAD)
+          fi
+          # Use heredoc syntax to handle multi-line output
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Step 5: Create the GitHub Release
+      # softprops/action-gh-release is the most popular action for this.
+      # It creates the release, attaches files, and formats the body.
+      # 'generate_release_notes: true' also adds GitHub's auto-generated
+      # notes (new contributors, full changelog link, etc.)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## 🚀 Changes in ${{ github.ref_name }}
+            ${{ steps.notes.outputs.notes }}
+
+            ---
+            _Built from commit ${{ github.sha }}_
+          # Attach the Spring Boot JAR to the release
+          files: target/*.jar
+          # Also include GitHub's auto-generated release notes
+          generate_release_notes: true

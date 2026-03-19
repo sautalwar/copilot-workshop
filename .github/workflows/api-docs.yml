@@ -1,0 +1,113 @@
+# =============================================================================
+# API Documentation Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Automatically generates OpenAPI (Swagger) documentation from the Spring Boot
+#   application whenever API-related code changes are merged to main. This ensures
+#   API docs are ALWAYS up-to-date — no more "the docs say one thing but the API
+#   does another" situations.
+#
+# WHAT IT DOES:
+#   1. Builds the Spring Boot application
+#   2. Starts it temporarily in the background
+#   3. Fetches the auto-generated OpenAPI spec from the running app
+#   4. Saves the spec as a build artifact (JSON and YAML formats)
+#
+# HOW SPRINGDOC-OPENAPI WORKS:
+#   The project includes the springdoc-openapi-starter-webmvc-ui dependency
+#   (see pom.xml). At runtime, this library:
+#   - Scans all @RestController classes
+#   - Reads @GetMapping, @PostMapping, etc. annotations
+#   - Inspects request/response model classes
+#   - Generates a complete OpenAPI 3.0 specification
+#   - Serves it at /v3/api-docs (JSON) and /v3/api-docs.yaml (YAML)
+#   - Also provides Swagger UI at /swagger-ui.html
+#
+# WHY AUTO-GENERATING API DOCS MATTERS:
+#   - Manual API docs drift out of sync within days
+#   - OpenAPI spec can be imported into Postman, Insomnia, or client generators
+#   - Frontend teams can code against the spec before the backend is deployed
+#   - API changes are visible in the artifact history
+#
+# TRIGGER:
+#   Only runs on pushes to main that change controller, model, or pom.xml files.
+#   No need to regenerate docs if only service/repository code changed.
+#
+# HOW TO USE THE OUTPUT:
+#   - Download the openapi-spec artifact from the workflow run
+#   - Import openapi.json into Postman for API testing
+#   - Use openapi-generator-cli to generate client SDKs
+#   - Host the spec with Swagger UI or Redoc for a documentation website
+# =============================================================================
+
+name: API Documentation
+
+on:
+  push:
+    branches: [main]
+    # Only trigger when API-relevant files change
+    paths:
+      - 'src/main/**/controller/**'  # REST endpoints
+      - 'src/main/**/model/**'       # Request/response models
+      - 'pom.xml'                     # Dependency changes might affect docs
+
+jobs:
+  generate-docs:
+    name: Generate OpenAPI Docs
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the code
+      - uses: actions/checkout@v4
+
+      # Step 2: Set up Java with Maven caching
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Build the application JAR (skip tests — we just need the artifact)
+      - name: Build Application
+        run: mvn clean package -DskipTests -B
+
+      # Step 4: Start the app, fetch the OpenAPI spec, then stop the app
+      # This is a common CI pattern for extracting runtime-generated docs.
+      # The app starts with an H2 in-memory database, so no external DB needed.
+      - name: Start App & Capture OpenAPI Spec
+        run: |
+          # Create the output directory for API docs
+          mkdir -p docs/api
+
+          # Start the Spring Boot app in the background
+          java -jar target/*.jar &
+          APP_PID=$!
+
+          # Wait for the app to fully start (Spring Boot takes ~10-15 seconds)
+          echo "⏳ Waiting for application to start..."
+          sleep 15
+
+          # Fetch the OpenAPI spec in both JSON and YAML formats
+          # '|| true' ensures the workflow doesn't fail if the endpoint isn't available
+          echo "📥 Fetching OpenAPI specification..."
+          curl -s http://localhost:8080/v3/api-docs > docs/api/openapi.json || true
+          curl -s http://localhost:8080/v3/api-docs.yaml > docs/api/openapi.yaml || true
+
+          # Verify we got valid output
+          if [ -s docs/api/openapi.json ]; then
+            echo "✅ OpenAPI JSON spec captured successfully"
+          else
+            echo "⚠️  Failed to capture OpenAPI spec — is springdoc-openapi configured?"
+          fi
+
+          # Clean up — stop the application
+          kill $APP_PID || true
+
+      # Step 5: Upload the API spec as a downloadable artifact
+      # Artifacts are available for 90 days by default on the workflow run page.
+      - name: Upload API Spec
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: docs/api/

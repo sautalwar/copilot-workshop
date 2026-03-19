@@ -1,0 +1,96 @@
+# =============================================================================
+# Docker Build Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Builds the Docker image for the Spring Boot application and scans it for
+#   security vulnerabilities. Catches container-level issues (vulnerable base
+#   images, exposed ports, misconfigured layers) before deployment.
+#
+# WHAT IT DOES:
+#   1. Builds the Spring Boot JAR
+#   2. Builds a Docker image using the multi-stage Dockerfile
+#   3. Scans the image with Trivy for known vulnerabilities (CVEs)
+#   4. Fails the build if CRITICAL or HIGH severity vulnerabilities are found
+#
+# WHY SCANNING DOCKER IMAGES MATTERS:
+#   Your application code might be secure, but the base image (eclipse-temurin,
+#   Alpine Linux, etc.) ships with hundreds of system packages. Any of these
+#   can have known vulnerabilities. Trivy checks all installed packages against
+#   vulnerability databases and flags issues before they reach production.
+#
+# MULTI-STAGE BUILD EXPLAINED:
+#   The Dockerfile uses two stages:
+#   1. Build stage (eclipse-temurin:17-jdk-alpine) — includes the full JDK
+#      and Maven to compile the application. This image is ~400MB.
+#   2. Runtime stage (eclipse-temurin:17-jre-alpine) — includes only the JRE
+#      needed to RUN the app. This image is ~150MB.
+#   The final image contains only the JRE + your JAR = smaller, more secure.
+#
+# TRIGGERS:
+#   - Push to main with source/config/Dockerfile changes: validates the build
+#   - PR with Dockerfile changes: ensures Dockerfile edits don't break the build
+#
+# HOW TO CUSTOMIZE:
+#   - Add 'docker push' step to push to a container registry (ACR, ECR, GHCR)
+#   - Change severity filter (e.g., add 'MEDIUM' to catch more issues)
+#   - Add '--ignore-unfixed' to Trivy to suppress CVEs with no available patch
+#   - Add Docker layer caching for faster builds
+# =============================================================================
+
+name: Docker Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'        # Application source code
+      - 'pom.xml'       # Dependencies
+      - 'Dockerfile'    # Container configuration
+  pull_request:
+    paths:
+      - 'Dockerfile'    # Always validate Dockerfile changes
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the code
+      - uses: actions/checkout@v4
+
+      # Step 2: Set up Java (needed to build the JAR before Docker build)
+      # Even though the Dockerfile has a build stage, building the JAR first
+      # gives us faster feedback if there are compilation errors.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Build the JAR artifact
+      - name: Build JAR
+        run: mvn clean package -DskipTests -B
+
+      # Step 4: Build the Docker image
+      # Tag with the commit SHA for unique identification.
+      # This doesn't push to any registry — it just validates the build.
+      - name: Build Docker Image
+        run: docker build -t outfront-workshop:${{ github.sha }} .
+
+      # Step 5: Scan the Docker image for vulnerabilities using Trivy
+      # Trivy is a comprehensive security scanner that checks:
+      #   - OS packages (Alpine apk, Debian apt, etc.)
+      #   - Application dependencies (Maven, npm, pip, etc.)
+      #   - Known vulnerabilities (CVEs) from multiple databases
+      #
+      # exit-code: '1' means the workflow FAILS if CRITICAL or HIGH
+      # vulnerabilities are found. This prevents deploying vulnerable images.
+      - name: Scan Docker Image for Vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'outfront-workshop:${{ github.sha }}'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'

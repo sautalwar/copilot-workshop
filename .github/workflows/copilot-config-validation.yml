@@ -1,0 +1,158 @@
+# =============================================================================
+# Copilot Config Validation Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Validates that GitHub Copilot configuration files (.github/copilot-instructions.md,
+#   path-scoped instructions, prompt files, and chat modes) are properly structured.
+#   Broken frontmatter = Copilot silently ignores the file = your customizations vanish.
+#
+# WHY THIS MATTERS:
+#   GitHub Copilot reads configuration files to customize its behavior for your
+#   project. These files use YAML frontmatter (the --- block at the top) to
+#   specify metadata like which files the instructions apply to. If the frontmatter
+#   is malformed or missing required fields, Copilot will silently skip the file.
+#   This workflow catches those mistakes before they reach main.
+#
+# WHAT IT VALIDATES:
+#   1. copilot-instructions.md — Checks it exists and isn't too large
+#      (very large files can degrade Copilot's context window)
+#   2. *.instructions.md — Verifies each has an 'applyTo:' frontmatter field
+#      (without this, Copilot doesn't know which files the instructions apply to)
+#   3. *.prompt.md — Checks for 'mode:' and 'description:' frontmatter
+#      (these make prompts discoverable in the Copilot prompt picker)
+#   4. *.chatmode.md — Verifies 'description:' exists
+#      (required for chat modes to appear in the mode selector)
+#
+# HOW TO EXTEND:
+#   - Add JSON schema validation for frontmatter
+#   - Check that applyTo patterns match actual files in the repo
+#   - Validate that referenced tools in chat modes exist
+#   - Add a step to check for orphaned instruction files
+#
+# TRIGGER:
+#   Runs on PRs that modify any Copilot configuration file.
+# =============================================================================
+
+name: Copilot Config Validation
+
+on:
+  pull_request:
+    # Only trigger when Copilot-related files are changed
+    paths:
+      - '.github/copilot-instructions.md'
+      - '.github/instructions/**'
+      - '.github/prompts/**'
+      - '.github/chatmodes/**'
+      - 'COPILOT.md'
+
+jobs:
+  validate:
+    name: Validate Copilot Configs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Step 1: Check the main instructions file
+      # This file provides project-wide context to Copilot. It should exist
+      # but shouldn't be too large (>50KB) as it consumes Copilot's context window.
+      - name: Check instructions file exists
+        run: |
+          echo "🔍 Validating Copilot configuration files..."
+
+          # Check main instructions file
+          if [ -f .github/copilot-instructions.md ]; then
+            SIZE=$(wc -c < .github/copilot-instructions.md)
+            echo "✅ copilot-instructions.md exists (${SIZE} bytes)"
+            # Warn if the file is very large — it eats into Copilot's context window
+            if [ "$SIZE" -gt 50000 ]; then
+              echo "⚠️  WARNING: copilot-instructions.md is very large (${SIZE} bytes)."
+              echo "   Consider splitting into path-scoped instruction files in .github/instructions/"
+            fi
+          else
+            echo "⚠️  copilot-instructions.md not found (optional but recommended)"
+          fi
+
+      # Step 2: Validate path-scoped instruction files
+      # These files MUST have 'applyTo:' frontmatter that specifies which files
+      # the instructions apply to (e.g., applyTo: "src/**/*.java").
+      # Without this, the instructions file is completely ignored by Copilot.
+      - name: Validate instruction file frontmatter
+        run: |
+          echo "🔍 Checking path-scoped instruction files..."
+          ERRORS=0
+          for f in .github/instructions/*.instructions.md; do
+            [ -f "$f" ] || continue
+            echo "  Checking $f..."
+            # Verify applyTo frontmatter exists — this is REQUIRED
+            if head -5 "$f" | grep -q "applyTo:"; then
+              PATTERN=$(head -5 "$f" | grep "applyTo:" | sed 's/.*applyTo:\s*//' | tr -d '"' | tr -d "'")
+              echo "    ✅ applyTo: $PATTERN"
+            else
+              echo "    ❌ ERROR: Missing 'applyTo:' frontmatter in $f"
+              echo "       Without applyTo, Copilot will ignore this file entirely!"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "❌ Found $ERRORS instruction file(s) with missing frontmatter"
+            exit 1
+          fi
+
+      # Step 3: Validate reusable prompt files
+      # Prompt files benefit from having 'mode:' (ask/edit/agent) and
+      # 'description:' fields. These aren't strictly required but make
+      # prompts easier to discover and use.
+      - name: Validate prompt files
+        run: |
+          echo "🔍 Checking prompt files..."
+          for f in .github/prompts/*.prompt.md; do
+            [ -f "$f" ] || continue
+            echo "  Checking $f..."
+            if head -5 "$f" | grep -q "mode:"; then
+              echo "    ✅ Has mode frontmatter"
+            else
+              echo "    ⚠️  WARNING: No 'mode:' in frontmatter (recommended: ask, edit, or agent)"
+            fi
+            if head -5 "$f" | grep -q "description:"; then
+              echo "    ✅ Has description"
+            else
+              echo "    ⚠️  WARNING: No 'description:' in frontmatter (helps with discoverability)"
+            fi
+          done
+
+      # Step 4: Validate chat mode files
+      # Chat modes MUST have a 'description:' field — it's displayed in the
+      # Copilot Chat mode picker. Without it, the mode won't appear.
+      - name: Validate chat mode files
+        run: |
+          echo "🔍 Checking chat mode files..."
+          ERRORS=0
+          for f in .github/chatmodes/*.chatmode.md; do
+            [ -f "$f" ] || continue
+            echo "  Checking $f..."
+            if head -5 "$f" | grep -q "description:"; then
+              echo "    ✅ Has description"
+            else
+              echo "    ❌ ERROR: Missing 'description:' in $f"
+              echo "       Without a description, this chat mode won't appear in the picker!"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ "$ERRORS" -gt 0 ]; then
+            echo "❌ Found $ERRORS chat mode(s) with missing description"
+            exit 1
+          fi
+
+      # Step 5: Print a summary of all Copilot configuration
+      - name: Summary
+        run: |
+          echo ""
+          echo "📋 Copilot Config Summary:"
+          echo "  Instructions: $(ls .github/instructions/*.instructions.md 2>/dev/null | wc -l) path-scoped files"
+          echo "  Prompts: $(ls .github/prompts/*.prompt.md 2>/dev/null | wc -l) prompt files"
+          echo "  Chat Modes: $(ls .github/chatmodes/*.chatmode.md 2>/dev/null | wc -l) agent files"
+          echo "  COPILOT.md: $([ -f COPILOT.md ] && echo 'present' || echo 'missing')"
+          echo ""
+          echo "✅ Copilot configuration validation complete!"

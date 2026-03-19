@@ -1,0 +1,72 @@
+# =============================================================================
+# CODEOWNERS — Automatic Review Assignment
+# =============================================================================
+#
+# PURPOSE:
+#   When a pull request modifies files matching these patterns, the listed
+#   owners are AUTOMATICALLY added as reviewers. Combined with branch
+#   protection rules requiring reviews, this ensures the right people
+#   review the right code.
+#
+# HOW IT WORKS:
+#   - Patterns are matched top-to-bottom; later rules override earlier ones
+#   - The "*" pattern matches everything (default owner)
+#   - More specific patterns (e.g., ".github/workflows/") take priority
+#   - Owners can be GitHub usernames, team slugs (@org/team), or emails
+#
+# WHY THIS MATTERS:
+#   Security-sensitive files (CI workflows, MCP server, security policies)
+#   should always be reviewed by security-aware team members — not just
+#   whoever happens to be available.
+#
+# =============================================================================
+
+# --- Default owner for all files ---
+# If no more specific rule matches, this person/team reviews.
+# Update this to your team or team lead.
+* @sautalwar
+
+# --- CI/CD Workflows ---
+# Workflow files control what runs in CI and have access to secrets.
+# A malicious workflow change could exfiltrate secrets or deploy
+# compromised code. These MUST be reviewed carefully.
+.github/workflows/ @sautalwar
+
+# --- Dependabot & GitHub Config ---
+# Changes to Dependabot config, Actions permissions, or other
+# GitHub-specific configuration files.
+.github/ @sautalwar
+
+# --- MCP Server ---
+# The MCP server has access to external systems (Jira, etc.).
+# Changes here could introduce data exfiltration or injection risks.
+mcp-server/ @sautalwar
+
+# --- Security Policy ---
+# Changes to the security policy affect how vulnerabilities are reported
+# and handled. Must be reviewed by a security-aware team member.
+SECURITY.md @sautalwar
+
+# --- Security Documentation ---
+# Ensuring security guidance stays accurate and up-to-date.
+docs/security/ @sautalwar
+
+# --- Gitleaks Configuration ---
+# Changes to secret scanning rules could weaken detection.
+.gitleaks.toml @sautalwar
+
+# =============================================================================
+# CUSTOMIZATION FOR YOUR TEAM
+# =============================================================================
+#
+# For larger teams, use GitHub team slugs:
+#   .github/workflows/ @your-org/platform-team @your-org/security-team
+#   mcp-server/        @your-org/ai-team @your-org/security-team
+#   src/main/java/     @your-org/backend-team
+#
+# For specific file types:
+#   *.sql              @your-org/dba-team
+#   Dockerfile         @your-org/platform-team
+#   pom.xml            @your-org/backend-team
+#
+# =============================================================================

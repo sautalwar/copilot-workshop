@@ -1,0 +1,132 @@
+# =============================================================================
+# Dependabot Auto-Merge Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Automatically merge Dependabot pull requests for PATCH and MINOR version
+#   updates after CI passes. This keeps dependencies fresh without requiring
+#   manual review for low-risk changes.
+#
+# WHY AUTO-MERGE?
+#   Dependabot can create dozens of PRs per week. Without auto-merge,
+#   developers get "alert fatigue" and start ignoring dependency updates
+#   entirely — which is worse than auto-merging safe updates.
+#
+# WHAT'S SAFE TO AUTO-MERGE?
+#   Following Semantic Versioning (semver: MAJOR.MINOR.PATCH):
+#
+#   ✅ PATCH updates (1.2.3 → 1.2.4):
+#      Bug fixes only. No API changes. Safe to auto-merge.
+#
+#   ✅ MINOR updates (1.2.3 → 1.3.0):
+#      New features, backward compatible. Generally safe, but your CI tests
+#      validate compatibility before merge.
+#
+#   ❌ MAJOR updates (1.2.3 → 2.0.0):
+#      Breaking changes. NEVER auto-merge. Requires manual review, testing,
+#      and potentially code changes.
+#
+# HOW IT WORKS:
+#   1. Dependabot creates a PR
+#   2. CI pipeline runs (build, test, security checks)
+#   3. This workflow checks if it's a patch/minor update
+#   4. If yes → enables auto-merge (GitHub merges once all checks pass)
+#   5. If no (major update) → left for human review
+#
+# =============================================================================
+
+name: Dependabot Auto-Merge
+
+on: pull_request
+
+# --- PERMISSIONS ---
+# These permissions let the workflow:
+#   - contents: write  → Approve and merge the PR
+#   - pull-requests: write → Add comments and approvals to the PR
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+
+    # --- ACTOR CHECK ---
+    # Only run this job for Dependabot PRs. The github.actor is the user
+    # (or bot) that triggered the workflow. "dependabot[bot]" is GitHub's
+    # official Dependabot bot account.
+    #
+    # This prevents the auto-merge logic from running on human-created PRs.
+    if: github.actor == 'dependabot[bot]'
+
+    steps:
+      # --- STEP 1: Fetch Dependabot metadata ---
+      # This action extracts metadata from the Dependabot PR:
+      #   - update-type: "version-update:semver-patch", "semver-minor", "semver-major"
+      #   - dependency-names: which packages are being updated
+      #   - previous-version / new-version: version change details
+      #
+      # We use this metadata to make the auto-merge decision.
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # --- STEP 2: Auto-merge safe updates ---
+      # Only merges if the update is a PATCH or MINOR version bump.
+      # The `gh pr merge --auto` command enables GitHub's auto-merge feature,
+      # which waits for all required status checks to pass before merging.
+      #
+      # --squash: Squash-merges the PR to keep the commit history clean.
+      #           Each Dependabot update becomes a single commit.
+      #
+      # CUSTOMIZATION OPTIONS:
+      #   - To auto-merge ONLY patches: remove the minor condition
+      #   - To auto-merge specific packages: add package name checks
+      #   - To require approval first: add a gh pr review --approve step
+      #
+      # EXAMPLE — Auto-merge only for specific packages:
+      #   if: |
+      #     steps.metadata.outputs.update-type == 'version-update:semver-patch'
+      #     && contains(steps.metadata.outputs.dependency-names, 'spring-boot')
+      #
+      - name: Auto-merge patch and minor updates
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GH_TOKEN is used by the `gh` CLI. GITHUB_TOKEN is automatically
+          # provided by GitHub Actions — no need to create a secret manually.
+
+# =============================================================================
+# IMPORTANT NOTES
+# =============================================================================
+#
+# 1. BRANCH PROTECTION REQUIRED
+#    Auto-merge only works if branch protection rules require status checks.
+#    Without required checks, the PR merges immediately (no CI validation).
+#    Set up: Settings → Branches → Branch protection → Require status checks
+#
+# 2. SECURITY CONSIDERATION
+#    Auto-merging means fewer human eyes on dependency changes. Mitigate by:
+#    - Requiring CI to pass (build + tests + security scans)
+#    - Never auto-merging major version updates
+#    - Reviewing the auto-merge log weekly
+#    - Using Dependabot's compatibility score when available
+#
+# 3. AUDIT TRAIL
+#    Every auto-merged PR is visible in the repo's PR history with full
+#    CI status. You can always review what was auto-merged after the fact.
+#
+# 4. DISABLING FOR SPECIFIC PACKAGES
+#    If a particular dependency has caused issues with auto-merge, you can
+#    exclude it by adding conditions to the `if` clause. For example:
+#      if: >-
+#        !contains(steps.metadata.outputs.dependency-names, 'risky-package')
+#        && (patch or minor condition)
+#
+# =============================================================================

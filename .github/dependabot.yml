@@ -1,0 +1,178 @@
+# =============================================================================
+# Dependabot Configuration
+# =============================================================================
+#
+# PURPOSE:
+#   Dependabot automatically creates pull requests to keep your dependencies
+#   up to date and secure. It has TWO distinct functions:
+#
+#   1. DEPENDABOT ALERTS (enabled in repo Settings):
+#      Notifies you when a dependency has a known vulnerability (CVE).
+#      Creates security update PRs to fix vulnerable versions.
+#
+#   2. DEPENDABOT VERSION UPDATES (this file):
+#      Proactively updates dependencies to their latest versions,
+#      even if there's no known vulnerability. This reduces the
+#      "dependency drift" that makes future upgrades painful.
+#
+# WHY BOTH MATTER:
+#   - Alerts fix KNOWN vulnerabilities (reactive)
+#   - Version updates prevent FUTURE vulnerabilities (proactive)
+#   - Staying current means smaller, safer upgrades
+#
+# FILE LOCATION:
+#   This file MUST be at .github/dependabot.yml (not in workflows/).
+#   Dependabot reads it directly — it's not a GitHub Actions workflow.
+#
+# =============================================================================
+
+version: 2
+
+updates:
+  # ===========================================================================
+  # MAVEN DEPENDENCIES
+  # ===========================================================================
+  # Monitors your pom.xml for outdated Java dependencies.
+  # Maven Central is checked for newer versions.
+  - package-ecosystem: "maven"
+    directory: "/"
+    # The directory containing your pom.xml. Use "/" for the repo root.
+    # For multi-module Maven projects, you might need multiple entries
+    # pointing to each module's directory.
+
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      # Weekly on Monday means Dependabot PRs arrive at the start of the week
+      # when the team has bandwidth to review them. Avoid "daily" — it creates
+      # too much noise. Avoid "monthly" — vulnerabilities sit too long.
+
+    open-pull-requests-limit: 10
+    # Maximum number of open Dependabot PRs at once. This prevents
+    # Dependabot from overwhelming you with 50+ PRs. If you have more
+    # than 10 outdated deps, Dependabot prioritizes security updates.
+
+    reviewers:
+      - "sautalwar"
+    # Who gets assigned to review Dependabot PRs. Add your team leads
+    # or security champions here. For enterprise, you can use team slugs:
+    #   - "org-name/security-team"
+
+    labels:
+      - "dependencies"
+      - "automated"
+    # Labels help filter and track Dependabot PRs in your project board.
+    # "automated" makes it easy to distinguish from human-created PRs.
+
+    # =========================================================================
+    # DEPENDENCY GROUPING
+    # =========================================================================
+    # Without grouping, updating 5 Spring Boot libraries creates 5 separate
+    # PRs. With grouping, they're combined into ONE PR — reducing noise
+    # and ensuring related libraries stay in sync.
+    #
+    # WHY GROUP SPRING BOOT?
+    #   Spring Boot uses a BOM (Bill of Materials) that ensures all Spring
+    #   libraries are compatible with each other. Updating spring-boot-starter-web
+    #   without spring-boot-starter-data-jpa can cause version conflicts.
+    #   Grouping ensures they update together.
+    #
+    # WHY GROUP TESTING?
+    #   JUnit and Mockito updates rarely break production code. Grouping
+    #   them reduces review burden — one PR to update all test dependencies.
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework*"
+          # Matches all Spring Framework and Spring Boot dependencies:
+          # org.springframework.boot:spring-boot-starter-*
+          # org.springframework:spring-*
+          # org.springframework.security:spring-security-*
+        update-types:
+          - "minor"
+          - "patch"
+          # Only group minor/patch updates. Major updates (e.g., Spring Boot
+          # 2.x → 3.x) should be individual PRs for careful review.
+
+      testing:
+        patterns:
+          - "org.junit*"
+          - "org.mockito*"
+          # Groups JUnit 5 and Mockito updates together.
+          # These are test-only dependencies — lower risk.
+
+      # OPTIONAL: Add more groups as needed
+      # aws-sdk:
+      #   patterns:
+      #     - "software.amazon.awssdk*"
+      #     - "com.amazonaws*"
+      #   update-types:
+      #     - "minor"
+      #     - "patch"
+
+  # ===========================================================================
+  # GITHUB ACTIONS
+  # ===========================================================================
+  # Monitors your workflow files (.github/workflows/*.yml) for outdated
+  # action versions. This is CRITICAL for security because:
+  #
+  # 1. Actions run with your repo's permissions
+  # 2. Outdated actions may have known vulnerabilities
+  # 3. Pinning to major versions (v4) still allows minor/patch drift
+  #
+  # Example: actions/checkout@v4 might resolve to v4.1.0 today and v4.2.0
+  # tomorrow. Dependabot tracks these changes and creates PRs when new
+  # versions are available.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "ci"
+      - "automated"
+
+  # ===========================================================================
+  # NPM (for MCP Server)
+  # ===========================================================================
+  # If you have a Node.js-based MCP server, uncomment this section to
+  # keep its dependencies updated.
+  # - package-ecosystem: "npm"
+  #   directory: "/mcp-server"
+  #   schedule:
+  #     interval: "weekly"
+  #   labels:
+  #     - "dependencies"
+  #     - "mcp-server"
+  #     - "automated"
+  #   groups:
+  #     mcp-sdk:
+  #       patterns:
+  #         - "@modelcontextprotocol*"
+
+# =============================================================================
+# ADDITIONAL CONFIGURATION OPTIONS
+# =============================================================================
+#
+# IGNORE SPECIFIC DEPENDENCIES:
+#   If a dependency causes issues, you can tell Dependabot to skip it:
+#   ignore:
+#     - dependency-name: "com.example:problematic-lib"
+#       versions: ["2.x"]     # Ignore all 2.x versions
+#
+# TARGET BRANCH:
+#   By default, Dependabot targets the default branch (main). To target
+#   a different branch:
+#   target-branch: "develop"
+#
+# COMMIT MESSAGE PREFIX:
+#   Customize how Dependabot commit messages look:
+#   commit-message:
+#     prefix: "deps"           # Results in: "deps: Bump spring-boot from 3.1 to 3.2"
+#
+# ASSIGNEES:
+#   Auto-assign team members to Dependabot PRs:
+#   assignees:
+#     - "developer1"
+#     - "developer2"
+#
+# =============================================================================

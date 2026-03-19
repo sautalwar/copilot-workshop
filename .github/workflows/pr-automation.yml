@@ -1,0 +1,72 @@
+# =============================================================================
+# PR Automation Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Automates the tedious parts of the PR lifecycle so developers can focus on
+#   code, not process. Every minute spent manually labeling a PR or remembering
+#   to assign reviewers is a minute NOT spent writing code.
+#
+# WHAT IT DOES:
+#   1. Auto-labels PRs based on which files were changed (e.g., changes to
+#      src/**/*.java get the "java" label, changes to mcp-server/ get "mcp")
+#   2. Makes it easy to filter PRs by area in GitHub's UI
+#   3. Creates a historical record of what areas each PR touched
+#
+# WHY AUTO-LABELING SAVES TIME:
+#   - Developers forget to add labels (they're focused on code, not process)
+#   - Consistent labeling enables filtering: "show me all PRs that touched tests"
+#   - Labels feed into other workflows and reporting tools
+#   - New team members don't need to learn the labeling conventions
+#
+# HOW IT WORKS:
+#   The actions/labeler@v5 action reads the rules from .github/labeler.yml
+#   and compares them against the list of files changed in the PR. Any matching
+#   rules result in the corresponding label being added to the PR.
+#
+# HOW TO CUSTOMIZE:
+#   - Edit .github/labeler.yml to add new labels or change file patterns
+#   - Add more jobs below for assignment, review requests, or notifications
+#   - Consider adding auto-assignment based on CODEOWNERS
+#
+# RELATED FILE:
+#   .github/labeler.yml — defines which file patterns map to which labels
+# =============================================================================
+
+name: PR Automation
+
+# Trigger on PR lifecycle events:
+#   - opened: When a new PR is created
+#   - synchronize: When new commits are pushed to an existing PR
+#   - ready_for_review: When a draft PR is marked as ready
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted]
+
+# Permissions needed for the GITHUB_TOKEN:
+#   - contents: read — to check out code and read file lists
+#   - pull-requests: write — to add labels to the PR
+#   - issues: write — labels API sometimes requires issue write permission
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  auto-label:
+    name: Auto-Label PR
+    runs-on: ubuntu-latest
+    # Only run for PR events, not review events
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      # Apply labels based on file path rules defined in .github/labeler.yml
+      # The action diffs the PR's changed files against glob patterns and
+      # adds matching labels. It's idempotent — running twice won't duplicate.
+      - name: Label based on file paths
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"

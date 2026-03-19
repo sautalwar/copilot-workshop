@@ -1,0 +1,13 @@
+{
+  "name": "outfront-inventory-mcp",
+  "version": "1.0.0",
+  "description": "Custom MCP server for OutFront Media inventory lookup — a workshop teaching example with guardrails",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  }
+}

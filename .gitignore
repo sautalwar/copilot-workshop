@@ -1,0 +1,41 @@
+# Build output
+target/
+build/
+
+# IDE files
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+.factorypath
+*.swp
+*.swo
+*~
+
+# Compiled files
+*.class
+*.jar
+*.war
+*.ear
+
+# Node modules
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Maven wrapper (if not committed)
+!.mvn/wrapper/maven-wrapper.jar
+
+# H2 database files
+*.db
+*.mv.db
+*.trace.db

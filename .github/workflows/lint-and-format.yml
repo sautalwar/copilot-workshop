@@ -1,0 +1,94 @@
+# =============================================================================
+# Lint & Format Check Workflow
+# =============================================================================
+#
+# PURPOSE:
+#   Enforces consistent code style and catches common bug patterns in Java code.
+#   This is your first line of defense — bad formatting and known anti-patterns
+#   get caught BEFORE code review, saving reviewer time and energy.
+#
+# WHAT IT DOES:
+#   1. Checkstyle — Enforces Google Java Style Guide conventions (indentation,
+#      naming, imports, Javadoc). Consistent style makes code easier to read
+#      and review across the entire team.
+#   2. SpotBugs — Static analysis that finds common bug patterns like null
+#      pointer dereferences, resource leaks, infinite loops, and thread safety
+#      issues. Think of it as a robot code reviewer that never gets tired.
+#
+# TRIGGERS:
+#   Runs on every push (to any branch) and every pull request. This ensures
+#   code quality is checked early and often — not just at merge time.
+#
+# HOW TO CUSTOMIZE:
+#   - Checkstyle rules: Add a checkstyle.xml to the project root and configure
+#     the maven-checkstyle-plugin in pom.xml to point to it.
+#   - SpotBugs filters: Create a spotbugs-exclude.xml to suppress false positives.
+#   - To make SpotBugs blocking (fail the build), remove continue-on-error: true.
+#
+# PREREQUISITES:
+#   Add these plugins to your pom.xml <build><plugins> section:
+#     - maven-checkstyle-plugin (for checkstyle:check)
+#     - spotbugs-maven-plugin (for spotbugs:check)
+#   See: https://maven.apache.org/plugins/maven-checkstyle-plugin/
+#   See: https://spotbugs.github.io/spotbugs-maven-plugin/
+# =============================================================================
+
+name: Lint & Format Check
+
+# Trigger on every push and every pull request — catch issues early
+on: [push, pull_request]
+
+jobs:
+  checkstyle:
+    name: Java Code Style
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository code
+      - uses: actions/checkout@v4
+
+      # Step 2: Set up Java 17 with Temurin (Eclipse's free OpenJDK distribution)
+      # The 'cache: maven' option caches ~/.m2/repository between runs, which
+      # dramatically speeds up builds by avoiding re-downloading dependencies.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Run Checkstyle
+      # -B = "batch mode" — suppresses download progress output for cleaner logs.
+      # Checkstyle enforces the Google Java Style Guide by default. If this step
+      # fails, developers see exactly which lines violate the style guide.
+      # Common issues: wrong indentation, missing Javadoc, wildcard imports.
+      - name: Run Checkstyle
+        run: mvn checkstyle:check -B
+
+      # Step 4: Run SpotBugs
+      # SpotBugs performs deep static analysis to find real bugs — not style issues.
+      # It detects things like:
+      #   - Null pointer dereferences
+      #   - Resource leaks (unclosed streams, connections)
+      #   - Infinite recursive loops
+      #   - Incorrect equals/hashCode implementations
+      #   - Thread safety violations
+      #
+      # WHY continue-on-error: true?
+      # SpotBugs findings are ADVISORY, not blocking. New projects often have
+      # many findings, and blocking the build would be too disruptive. Instead,
+      # we report findings and let developers address them incrementally.
+      # Once your codebase is clean, remove continue-on-error to enforce it.
+      - name: Run SpotBugs
+        run: mvn spotbugs:check -B
+        continue-on-error: true  # Advisory — don't fail the build, just report
+
+      # Step 5: Upload the SpotBugs XML report as a build artifact
+      # This lets developers download and inspect the full report even after
+      # the workflow run completes. The 'if: always()' ensures the upload
+      # happens even if previous steps failed.
+      - name: Upload SpotBugs Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: target/spotbugsXml.xml

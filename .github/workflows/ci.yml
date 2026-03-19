@@ -1,0 +1,193 @@
+# =============================================================================
+# CI Pipeline — Build, Test & Security
+# =============================================================================
+#
+# PURPOSE:
+#   This is the primary CI pipeline that runs on every push and PR. It ensures
+#   code compiles, tests pass, and dependencies are free of known vulnerabilities
+#   BEFORE code can be merged.
+#
+# JOBS:
+#   1. build-and-test    — Compile, run unit/integration tests, collect coverage
+#   2. dependency-check  — OWASP scan for vulnerable dependencies (CVEs)
+#
+# WHY SEPARATE JOBS?
+#   Jobs run in PARALLEL by default. This means:
+#   - Build failures show up fast (don't wait for OWASP scan)
+#   - OWASP scan doesn't block test results
+#   - Each job has its own clear status check in the PR
+#   - You can require specific jobs in branch protection rules
+#
+# =============================================================================
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ===========================================================================
+  # JOB 1: BUILD & TEST
+  # ===========================================================================
+  # Compiles the Java application and runs all tests (unit + integration).
+  # This is the most critical job — if tests fail, the PR should not merge.
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Java Setup ---
+      # cache: maven enables GitHub Actions' built-in Maven dependency caching.
+      # This caches ~/.m2/repository between runs, dramatically speeding up
+      # builds after the first run (from 2-3 minutes to 30-60 seconds).
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # --- Build ---
+      # `mvn clean verify` does more than `mvn compile`:
+      #   clean    → Deletes target/ for a fresh build
+      #   verify   → Compiles, runs tests, and runs verification checks
+      #              (including any Maven plugins like Checkstyle, SpotBugs, etc.)
+      #
+      # -B enables batch mode: no interactive prompts, cleaner output for CI.
+      - name: Build with Maven
+        run: mvn clean verify -B
+
+      # --- Test ---
+      # Runs unit tests separately to get clear test output.
+      # In many setups, `mvn verify` already runs tests, but this explicit
+      # step ensures test results are clearly visible in the CI log.
+      - name: Run Tests
+        run: mvn test -B
+
+      # --- Upload Test Results ---
+      # Uploads Surefire test reports as downloadable artifacts.
+      # `if: always()` ensures reports are uploaded even if tests FAIL —
+      # this is critical for debugging test failures in CI.
+      #
+      # Test results are available for 90 days at:
+      #   Actions → Workflow run → Artifacts → test-results
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: target/surefire-reports/
+
+      # --- Upload Coverage Report ---
+      # If JaCoCo (Java Code Coverage) is configured in pom.xml, this
+      # uploads the coverage report. Coverage helps ensure security-critical
+      # code paths are actually tested.
+      #
+      # To add JaCoCo to your project, add to pom.xml:
+      #   <plugin>
+      #     <groupId>org.jacoco</groupId>
+      #     <artifactId>jacoco-maven-plugin</artifactId>
+      #     <version>0.8.11</version>
+      #     <executions>
+      #       <execution><goals><goal>prepare-agent</goal></goals></execution>
+      #       <execution><id>report</id><phase>test</phase>
+      #         <goals><goal>report</goal></goals></execution>
+      #     </executions>
+      #   </plugin>
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/site/jacoco/
+
+  # ===========================================================================
+  # JOB 2: OWASP DEPENDENCY CHECK
+  # ===========================================================================
+  # Scans all Maven dependencies (including transitive ones) against the
+  # National Vulnerability Database (NVD) to find known security issues.
+  #
+  # WHY THIS MATTERS:
+  #   Your application's security is only as strong as its weakest dependency.
+  #   A vulnerability in a transitive dependency (one you didn't directly choose)
+  #   can be just as dangerous as one in your own code.
+  #
+  # WHAT IT CATCHES:
+  #   - Known CVEs in direct dependencies (what's in your pom.xml)
+  #   - Known CVEs in TRANSITIVE dependencies (pulled in by your dependencies)
+  #   - Outdated libraries with known exploits
+  #
+  # COMMON FINDINGS FOR SPRING BOOT:
+  #   - Jackson databind deserialization vulnerabilities
+  #   - Tomcat HTTP request smuggling
+  #   - Spring Framework RCE vulnerabilities
+  #   - SnakeYAML code execution issues
+  #   - Log4j/Logback issues
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      # --- OWASP Dependency Check ---
+      # The dependency-check-maven plugin:
+      # 1. Downloads the latest NVD data feed
+      # 2. Scans all dependencies (mvn dependency:tree)
+      # 3. Matches them against known CVEs
+      # 4. Generates an HTML report
+      #
+      # By default, it FAILS the build if it finds vulnerabilities with
+      # CVSS score >= 7 (High/Critical). You can adjust this threshold
+      # in pom.xml with <failBuildOnCVSS>7</failBuildOnCVSS>.
+      #
+      # NOTE: The NVD API now requires an API key for reliable access.
+      # Without it, you may see rate-limiting errors. Get a free key at:
+      # https://nvd.nist.gov/developers/request-an-api-key
+      # Then add it as a repo secret and use:
+      #   -DnvdApiKey=${{ secrets.NVD_API_KEY }}
+      - name: Run OWASP Dependency Check
+        run: mvn org.owasp:dependency-check-maven:check -B
+
+      # --- Upload Report ---
+      # The HTML report shows:
+      #   - Each vulnerable dependency
+      #   - CVE identifier and description
+      #   - CVSS score (severity)
+      #   - Affected versions and fix versions
+      #   - Links to detailed vulnerability info
+      - name: Upload Dependency Check Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.html
+
+# =============================================================================
+# BRANCH PROTECTION SETUP
+# =============================================================================
+#
+# To make this CI pipeline effective, configure branch protection rules:
+#
+#   Settings → Branches → Add rule for "main":
+#   ✅ Require a pull request before merging
+#   ✅ Require approvals (at least 1)
+#   ✅ Require status checks to pass before merging
+#      → Search and add: "Build & Test", "OWASP Dependency Check"
+#   ✅ Require branches to be up to date before merging
+#   ✅ Do not allow bypassing the above settings
+#
+# This ensures NO code reaches main without passing CI.
+# =============================================================================
