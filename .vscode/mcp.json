@@ -1,0 +1,20 @@
+{
+  "servers": {
+    "citizen-data-safe": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp-server/index.ts"],
+      "env": {
+        "NODE_ENV": "production",
+        "REDACTION_ENABLED": "true"
+      }
+    },
+    "citizen-data-unsafe": {
+      "command": "npx",
+      "args": ["tsx", "src/mcp-server/unsafe-example.ts"],
+      "env": {
+        "NODE_ENV": "development",
+        "REDACTION_ENABLED": "false"
+      }
+    }
+  }
+}

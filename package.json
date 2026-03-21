@@ -1,0 +1,30 @@
+{
+  "name": "copilot-workshop",
+  "version": "1.0.0",
+  "description": "GitHub Copilot Capabilities Workshop — 1-hour developer training",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start:mcp-safe": "npx tsx src/mcp-server/index.ts",
+    "start:mcp-unsafe": "npx tsx src/mcp-server/unsafe-example.ts",
+    "start:api": "npx tsx src/api/example.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "demo": "start workshop.html"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^4.21.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  },
+  "author": "Saurabh Talwar",
+  "license": "MIT"
+}
