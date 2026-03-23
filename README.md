@@ -51,14 +51,21 @@ outfront-copilot-workshop/
 │   │   │   ├── model/         # Data models / entities
 │   │   │   ├── repository/    # Data access layer
 │   │   │   └── service/       # Business logic
-│   │   └── resources/         # Application config (application.yml, etc.)
+│   │   └── resources/
+│   │       ├── application.properties            # Default config (H2)
+│   │       ├── application-sqlserver.properties   # SQL Server profile
+│   │       └── data.sql                           # Seed data
 │   └── test/                  # Unit and integration tests
+├── scripts/
+│   └── init-db.sql            # SQL Server database initialization
 ├── mcp-server/                # MCP server for Copilot integrations demo
 ├── .github/
 │   ├── chatmodes/             # Custom Copilot chat modes
 │   ├── instructions/          # Copilot custom instructions
 │   └── prompts/               # Reusable prompt files
 ├── .vscode/                   # VS Code workspace settings
+├── docker-compose.yml         # SQL Server + app containers
+├── Dockerfile                 # Multi-stage Spring Boot build
 ├── PARTICIPANT-PREP.md        # Pre-workshop setup guide for attendees
 ├── ADMIN-PRECHECK.md          # Admin checklist for workshop readiness
 └── README.md                  # This file
@@ -77,40 +84,80 @@ outfront-copilot-workshop/
 
 ## 🛠️ Tech Stack
 
-- **Java 17** with **Spring Boot**
+- **Java 17** with **Spring Boot 3.2.5**
 - **Maven** for build and dependency management
+- **H2** in-memory database (default dev profile)
+- **SQL Server 2022** (production profile)
 - **GitHub Copilot** (Business/Enterprise)
 - **MCP (Model Context Protocol)** for tool integrations
 
 ---
 
-## 🐳 Deployment
+## 💾 Database Profiles
 
-### Run the presentation locally
-
-Open `presentation/index.html` directly in your browser — no server needed.
-
-### Run via Docker (presentation only)
+### Default — H2 (in-memory, zero setup)
 
 ```bash
-# From the repo root
-docker build -f presentation/Dockerfile -t workshop-slides .
-docker run -p 8081:80 workshop-slides
+mvn spring-boot:run
 ```
 
-Open [http://localhost:8081](http://localhost:8081) to view the slides.
+H2 console available at [http://localhost:8080/h2-console](http://localhost:8080/h2-console) (JDBC URL: `jdbc:h2:mem:omsdb`, user: `sa`, no password).
 
-### Run both API + presentation via Docker Compose
+### SQL Server — Production-like environment
+
+#### Option A: Docker Compose (recommended)
 
 ```bash
-cd presentation
-docker-compose up --build
+# Start SQL Server + app together
+docker compose up -d
+
+# Or start SQL Server only (for local dev with mvn)
+docker compose up -d sqlserver
+mvn spring-boot:run -Dspring-boot.run.profiles=sqlserver
+```
+
+#### Option B: Connect to an existing SQL Server
+
+```bash
+# Set your connection details via environment variables
+export MSSQL_SA_PASSWORD="YourActualPassword"
+mvn spring-boot:run -Dspring-boot.run.profiles=sqlserver \
+  -Dspring-boot.run.arguments="--spring.datasource.url=jdbc:sqlserver://your-server:1433;databaseName=outfront_oms;encrypt=true;trustServerCertificate=true"
+```
+
+#### SQL Server Configuration
+
+| Property | Default Value |
+|----------|---------------|
+| Host | `localhost:1433` |
+| Database | `outfront_oms` |
+| Username | `sa` |
+| Password | `YourStrong@Passw0rd` (override via `MSSQL_SA_PASSWORD`) |
+| Hibernate DDL | `update` (auto-creates/updates tables) |
+| Connection Pool | HikariCP, max 10 connections |
+
+---
+
+## 🐳 Deployment
+
+### Run via Docker (app only, H2)
+
+```bash
+docker build -t outfront-workshop .
+docker run -p 8080:8080 outfront-workshop
+```
+
+### Run via Docker Compose (app + SQL Server)
+
+```bash
+docker compose up --build
 ```
 
 | Service | URL |
 |---------|-----|
 | Spring Boot API | [http://localhost:8080/api/orders](http://localhost:8080/api/orders) |
-| Presentation slides | [http://localhost:8081](http://localhost:8081) |
+| Swagger UI | [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) |
+| SQL Server | `localhost:1433` (connect via SSMS, Azure Data Studio, or sqlcmd) |
 
 ### Deploy to Azure Static Web Apps (optional)
 

@@ -6,9 +6,11 @@ applyTo: "**/*.sql"
 
 ## Compatibility
 
-- Write **standard SQL** that is compatible with both **H2** (development) and **DB2** (production)
+- Write **standard SQL** that is compatible with both **H2** (development) and **SQL Server** (production)
 - Avoid database-specific functions or syntax unless absolutely necessary
-- Do not use H2-only features like `AUTO_INCREMENT` — use `GENERATED ALWAYS AS IDENTITY` or define sequences
+- Do not use H2-only features like `AUTO_INCREMENT` — use `GENERATED ALWAYS AS IDENTITY` or `IDENTITY(1,1)`
+- For SQL Server-specific scripts, use `IF NOT EXISTS` guards for idempotent execution
+- Prefer `NVARCHAR` over `VARCHAR` in SQL Server DDL for Unicode support
 
 ## Query Style
 
