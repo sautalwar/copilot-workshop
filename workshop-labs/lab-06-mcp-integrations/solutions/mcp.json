@@ -1,0 +1,19 @@
+{
+  "servers": {
+    "jira": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-atlassian"],
+      "env": {
+        "ATLASSIAN_SITE_URL": "${env:JIRA_URL}",
+        "ATLASSIAN_USER_EMAIL": "${env:JIRA_EMAIL}",
+        "ATLASSIAN_API_TOKEN": "${env:JIRA_API_TOKEN}"
+      }
+    },
+    "inventory-lookup": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}/mcp-server/index.js"]
+    }
+  }
+}

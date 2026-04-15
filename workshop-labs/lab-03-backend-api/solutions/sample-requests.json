@@ -1,0 +1,69 @@
+{
+  "createCampaign": {
+    "description": "POST /api/campaigns — Create a new campaign",
+    "body": {
+      "name": "Times Square Holiday 2024",
+      "client": "Clear Channel NYC",
+      "startDate": "2024-12-01",
+      "endDate": "2025-01-15",
+      "budget": 150000.00,
+      "location": "Times Square, Manhattan"
+    },
+    "expectedStatus": 201
+  },
+  "createCampaign2": {
+    "description": "POST /api/campaigns — Create a second campaign for testing",
+    "body": {
+      "name": "Highway 101 Summer Push",
+      "client": "Lamar Advertising",
+      "startDate": "2025-06-01",
+      "endDate": "2025-08-31",
+      "budget": 75000.00,
+      "location": "US-101, San Jose to San Francisco"
+    },
+    "expectedStatus": 201
+  },
+  "activateCampaign": {
+    "description": "PUT /api/campaigns/{id}/status — Move from DRAFT to ACTIVE",
+    "body": {
+      "status": "ACTIVE"
+    },
+    "expectedStatus": 200
+  },
+  "completeCampaign": {
+    "description": "PUT /api/campaigns/{id}/status — Move from ACTIVE to COMPLETED",
+    "body": {
+      "status": "COMPLETED"
+    },
+    "expectedStatus": 200
+  },
+  "cancelCampaign": {
+    "description": "PUT /api/campaigns/{id}/status — Cancel from any status",
+    "body": {
+      "status": "CANCELLED"
+    },
+    "expectedStatus": 200
+  },
+  "invalidTransition": {
+    "description": "PUT /api/campaigns/{id}/status — DRAFT to COMPLETED (should fail)",
+    "body": {
+      "status": "COMPLETED"
+    },
+    "expectedStatus": 400
+  },
+  "invalidCreate_missingFields": {
+    "description": "POST /api/campaigns — Missing required fields (should fail)",
+    "body": {
+      "name": "",
+      "client": "",
+      "startDate": "2025-01-15",
+      "endDate": "2024-12-01",
+      "budget": -500
+    },
+    "expectedStatus": 400
+  },
+  "getCampaignNotFound": {
+    "description": "GET /api/campaigns/9999 — Campaign that doesn't exist",
+    "expectedStatus": 404
+  }
+}

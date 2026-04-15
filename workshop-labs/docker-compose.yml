@@ -1,0 +1,51 @@
+# =============================================================================
+# Docker Compose — OutFront Workshop OMS with SQL Server
+# =============================================================================
+# Usage:
+#   docker compose up -d              # Start SQL Server + app
+#   docker compose up -d sqlserver    # Start SQL Server only (for local dev)
+#   docker compose down               # Stop and remove containers
+#   docker compose down -v            # Stop and remove containers + volumes
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # SQL Server 2022 — Development database
+  # ---------------------------------------------------------------------------
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: outfront-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "YourStrong@Passw0rd"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Spring Boot Application — Connects to SQL Server
+  # ---------------------------------------------------------------------------
+  app:
+    build: .
+    container_name: outfront-app
+    environment:
+      SPRING_PROFILES_ACTIVE: sqlserver
+      MSSQL_SA_PASSWORD: "YourStrong@Passw0rd"
+    ports:
+      - "8080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+
+volumes:
+  sqlserver-data:
