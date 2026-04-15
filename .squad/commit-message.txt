@@ -1,0 +1,26 @@
+docs(.squad): Workshop-Labs Wave 1 & 2 orchestration + session log + decisions ledger
+
+Scribe tasks completed for workshop-labs build session:
+
+- orchestration-log: 4 entries (Fenster Wave 1, Kobayashi Wave 1, Kobayashi Wave 2 Labs, Kobayashi Wave 2 README)
+  * Fenster: Built workshop-labs/ structure (50+ files) in 65s
+  * Kobayashi: PREREQUISITES.md in 76s (Wave 1)
+  * Kobayashi: Lab 1 exercises + solutions in 327s (Wave 2 Labs)
+  * Kobayashi: workshop-labs/README.md in 38s (Wave 2 README)
+
+- log: Workshop materials build session entry (Wave 1 & 2 aggregation, learnings, next steps)
+
+- decisions/decisions.md: Foundational decisions ledger
+  * Workshop structure (progressive labs: Prompts → Skills → Agents → Integration)
+  * Directory architecture (workshop-labs/ separation, 50+ file structure)
+  * Participant onboarding (PREREQUISITES.md + README.md navigator)
+  * Prompt library (7 domain-specific templates for OutFront Media Order Management)
+  * Domain context (Order/Inventory, cross-domain validation)
+  * Derived patterns (HTML+PDF delivery, Copilot skills, MCP integration, participant success factors)
+
+- history.md updates: Scribe, Fenster, Kobayashi
+  * Cross-agent learnings propagated
+  * Wave 1 & 2 dependencies documented
+  * Team memory synchronized
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

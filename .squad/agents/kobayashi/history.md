@@ -7,10 +7,17 @@
 - User: Copilot
 
 ## Recent Work (2026-04-14)
-- Created Workshop_Presenter_Guide.html/PDF with 20 slides, talk tracks, click-by-click, Q&A prep
-- Created Workshop_Audience_Prerequisites.html/PDF with setup checklist, troubleshooting
-- Created/revised Internal_Team_Workshop_Plan.pdf (10 pages, landscape layout for table readability)
-- All materials follow OutFront Media domain context
+- **Wave 1:** Wrote workshop-labs/PREREQUISITES.md (76s) — JDK 17, Maven, VS Code+Copilot, Git, Node.js, Docker optional, verification steps
+- **Wave 2 (Labs):** Wrote Lab 1 exercises (5 files) + solutions (4 files) + lab README (327s) — progressive labs: explore, skill, prompts, agent, integration
+- **Wave 2 (README):** Wrote workshop-labs/README.md (38s) — quick start, repo map, lab index, app overview
+- All materials grounded in OutFront Media Order Management System (billboard/digital signage orders, inventory, cross-domain validation)
+- **Completed:** orchestration-log entries at 2026-04-14T16:30Z (Wave 1), 2026-04-14T16:35Z (Wave 2 Labs), 2026-04-14T16:36Z (Wave 2 README)
+
+## Recent Additions from Cross-Agent Work (2026-04-14)
+- Fenster Wave 1: workshop-labs/ structure (50+ files) — src/, .github/, mcp-server/, workshop-prompts/, Docker, lab-01 skeleton
+- Fenster: workshop-prompts/ library (7 domain-specific prompts) — used in Lab 1 Exercise 03
+- Scribe: decisions.md created with foundational decisions + cross-agent learnings; session log written; orchestration logs for all agents
+- Scribe: Fenster & Kobayashi history.md updated with cross-agent context
 
 ## Learnings
 
