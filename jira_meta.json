@@ -1,0 +1,42 @@
+{
+  "expand": "projects",
+  "projects": [
+    {
+      "expand": "issuetypes",
+      "self": "https://saurabhtalwar.atlassian.net/rest/api/3/project/10132",
+      "id": "10132",
+      "key": "OMS",
+      "name": "OutFront OMS - Campaign Management",
+      "avatarUrls": {
+        "48x48": "https://saurabhtalwar.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10404",
+        "24x24": "https://saurabhtalwar.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10404?size=small",
+        "16x16": "https://saurabhtalwar.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10404?size=xsmall",
+        "32x32": "https://saurabhtalwar.atlassian.net/rest/api/3/universal_avatar/view/type/project/avatar/10404?size=medium"
+      },
+      "issuetypes": [
+        {
+          "self": "https://saurabhtalwar.atlassian.net/rest/api/3/issuetype/10072",
+          "id": "10072",
+          "description": "A small, distinct piece of work.",
+          "iconUrl": "https://saurabhtalwar.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10318?size=medium",
+          "name": "Task",
+          "untranslatedName": "Task",
+          "subtask": false,
+          "hierarchyLevel": 0,
+          "expand": "fields"
+        },
+        {
+          "self": "https://saurabhtalwar.atlassian.net/rest/api/3/issuetype/10073",
+          "id": "10073",
+          "description": "A small piece of work that's part of a larger task.",
+          "iconUrl": "https://saurabhtalwar.atlassian.net/rest/api/2/universal_avatar/view/type/issuetype/avatar/10316?size=medium",
+          "name": "Sub-task",
+          "untranslatedName": "Sub-task",
+          "subtask": true,
+          "hierarchyLevel": -1,
+          "expand": "fields"
+        }
+      ]
+    }
+  ]
+}

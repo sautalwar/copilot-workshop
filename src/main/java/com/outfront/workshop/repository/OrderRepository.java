@@ -2,6 +2,8 @@ package com.outfront.workshop.repository;
 
 import com.outfront.workshop.model.Order;
 import com.outfront.workshop.model.Order.OrderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -11,6 +13,8 @@ import java.util.List;
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findByStatus(OrderStatus status);
+    Page<Order> findByStatus(OrderStatus status, Pageable pageable);
 
     List<Order> findByCustomerNameContainingIgnoreCase(String customerName);
+    Page<Order> findByCustomerNameContainingIgnoreCase(String customerName, Pageable pageable);
 }

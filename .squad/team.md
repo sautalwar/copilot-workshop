@@ -23,6 +23,7 @@
 | Kujan | Context Scout | .squad/agents/kujan/charter.md | 🔎 Active |
 | Strausz | Session Reporter | .squad/agents/strausz/charter.md | 📄 Active |
 | Edie | Copilot Customization Expert | .squad/agents/edie/charter.md | 🛠️ Active |
+| Baer | Java Implementer | .squad/agents/baer/charter.md | 🔧 Active |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 
 ## Project Context

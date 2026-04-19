@@ -707,9 +707,19 @@ body.overview #dot-tooltip { display: none; }
 </style>
 </head>
 <body>
-<div class="nav-bar">
-  <div class="nav-sections" id="navSections"></div>
-  <div class="nav-dots" id="navDots"></div>
+<div id="progress-bar"></div>
+<div id="slide-counter"></div>
+<div id="dot-tooltip"></div>
+
+<div id="bottom-nav" class="nav-bar">
+  <div class="nav-sections" id="bottom-nav-pills"></div>
+  <div class="nav-dots" id="bottom-nav-dots"></div>
+</div>
+
+<div id="speaker-notes">
+  <div id="notes-status"></div>
+  <div id="notes-content" contenteditable="true"></div>
+  <button id="btn-save-html" style="display:none;">Export</button>
 </div>
 
 <section class="slide title-slide active" data-slide="0" data-section="welcome" data-title="Title">
@@ -1857,6 +1867,7 @@ Thank you! Questions?</div>
   function buildBottomNav() {
     const pillsContainer = document.getElementById('bottom-nav-pills');
     const dotsContainer = document.getElementById('bottom-nav-dots');
+    if (!pillsContainer || !dotsContainer) return;
     pillsContainer.innerHTML = '';
     dotsContainer.innerHTML = '';
 
@@ -1956,6 +1967,7 @@ Thank you! Questions?</div>
   var tooltipEl = document.getElementById('dot-tooltip');
 
   function showDotTooltip(text, dotEl) {
+    if (!tooltipEl) return;
     tooltipEl.textContent = text;
     var rect = dotEl.getBoundingClientRect();
     tooltipEl.style.left = (rect.left + rect.width / 2) + 'px';
@@ -1964,16 +1976,16 @@ Thank you! Questions?</div>
   }
 
   function hideDotTooltip() {
-    tooltipEl.classList.remove('visible');
+    if (tooltipEl) tooltipEl.classList.remove('visible');
   }
 
   function updateUI() {
     // Update progress bar
     const progress = ((currentSlide + 1) / totalSlides) * 100;
-    progressBar.style.width = progress + '%';
+    if (progressBar) progressBar.style.width = progress + '%';
 
     // Update counter
-    slideCounter.textContent = (currentSlide + 1) + ' / ' + totalSlides;
+    if (slideCounter) slideCounter.textContent = (currentSlide + 1) + ' / ' + totalSlides;
 
     // Update slides
     slides.forEach((slide, i) => {
@@ -2030,8 +2042,8 @@ Thank you! Questions?</div>
 
   function toggleNotes() {
     notesVisible = !notesVisible;
-    speakerNotes.classList.toggle('visible', notesVisible);
-    if (notesVisible) notesContent.focus();
+    if (speakerNotes) speakerNotes.classList.toggle('visible', notesVisible);
+    if (notesVisible && notesContent) notesContent.focus();
   }
 
   // --- Notes editing: auto-save to localStorage + sync to DOM ---
@@ -2051,21 +2063,29 @@ Thank you! Questions?</div>
     }
     notesEl.textContent = text;
     // Flash save indicator
-    notesStatus.textContent = '✓ Saved';
-    notesStatus.classList.add('show');
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => notesStatus.classList.remove('show'), 1500);
+    if (notesStatus) {
+      notesStatus.textContent = '✓ Saved';
+      notesStatus.classList.add('show');
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(() => notesStatus.classList.remove('show'), 1500);
+    }
   }
 
-  notesContent.addEventListener('input', function() {
-    notesStatus.textContent = '● Typing…';
-    notesStatus.classList.add('show');
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(saveCurrentNotes, 600);
-  });
+  if (notesContent) {
+    notesContent.addEventListener('input', function() {
+      if (notesStatus) {
+        notesStatus.textContent = '● Typing…';
+        notesStatus.classList.add('show');
+      }
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveCurrentNotes, 600);
+    });
+  }
 
   // Export full HTML with notes baked in
-  document.getElementById('btn-save-html').addEventListener('click', function() {
+  var btnSaveHtml = document.getElementById('btn-save-html');
+  if (btnSaveHtml) {
+    btnSaveHtml.addEventListener('click', function() {
     // Flush any pending save
     saveCurrentNotes();
     // Build a clean copy of the document with notes embedded
@@ -2091,10 +2111,13 @@ Thank you! Questions?</div>
     a.download = 'presentation.html';
     a.click();
     URL.revokeObjectURL(a.href);
-    notesStatus.textContent = '⬇ Exported!';
-    notesStatus.classList.add('show');
-    setTimeout(() => notesStatus.classList.remove('show'), 2000);
+    if (notesStatus) {
+      notesStatus.textContent = '⬇ Exported!';
+      notesStatus.classList.add('show');
+      setTimeout(() => notesStatus.classList.remove('show'), 2000);
+    }
   });
+  }
 
   // Keyboard navigation
   document.addEventListener('keydown', function(e) {

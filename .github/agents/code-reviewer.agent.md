@@ -1,6 +1,9 @@
 ---
-description: 'Reviews code for quality, security, and adherence to team standards'
-tools: ['githubRepo', 'codebase']
+mode: agent
+description: Reviews code for quality, security, and adherence to team standards
+tools:
+  - githubRepo
+  - codebase
 ---
 
 # Code Reviewer

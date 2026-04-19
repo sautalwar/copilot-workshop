@@ -6,9 +6,14 @@ import java.time.LocalDate;
 /**
  * Represents a physical inventory item in the OutFront warehouse system.
  * Tracks billboard components, displays, and accessories.
+ * Indexed on name, location, and quantity for optimized search and filtering.
  */
 @Entity
-@Table(name = "inventory_item")
+@Table(name = "inventory_item", indexes = {
+    @Index(name = "idx_inventory_name", columnList = "name"),
+    @Index(name = "idx_inventory_location", columnList = "location"),
+    @Index(name = "idx_inventory_quantity", columnList = "quantity")
+})
 public class InventoryItem {
 
     @Id

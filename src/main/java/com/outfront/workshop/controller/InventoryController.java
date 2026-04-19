@@ -2,6 +2,8 @@ package com.outfront.workshop.controller;
 
 import com.outfront.workshop.model.InventoryItem;
 import com.outfront.workshop.service.InventoryService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,8 +25,8 @@ public class InventoryController {
     }
 
     @GetMapping
-    public List<InventoryItem> getAllItems() {
-        return inventoryService.getAllItems();
+    public Page<InventoryItem> getAllItems(Pageable pageable) {
+        return inventoryService.getAllItems(pageable);
     }
 
     @GetMapping("/{id}")

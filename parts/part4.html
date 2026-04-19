@@ -1,0 +1,576 @@
+<!-- ============================================================
+     PART 4 OF 4 — Slides 22-27, Close Container, Full JavaScript
+     ============================================================ -->
+
+<!-- SLIDE 22: Q&A — Technical Depth -->
+<div class="slide" data-title="Q&amp;A &ndash; Technical Depth">
+  <div class="slide-notes">These are the questions senior engineers will ask. Be technical but keep it grounded. Use analogies. If you don't know an answer, say 'Great question, let me get back to you with specifics' and follow up. Never bluff.</div>
+
+  <h1>&#128161; Q&amp;A &ndash; Technical Depth</h1>
+  <p class="subtitle">Top questions from senior engineers &ndash; with prepared answers</p>
+
+  <div class="qa-item">
+    <div class="q">Q: How does delta sync work for S3-based caches?</div>
+    <div class="a">A: <code>aws s3 sync</code> uses ETags (MD5 checksums) and last-modified timestamps to compare local vs. remote objects. Only changed files are transferred &ndash; identical files are skipped entirely. For a 2&nbsp;GB <code>node_modules</code> cache where 50&nbsp;MB changed, only that 50&nbsp;MB moves. Think of it like <code>rsync</code> but for object storage. The ETag comparison happens server-side, so you don&rsquo;t even download file headers for unchanged objects.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: How does RDS change detection work without polling?</div>
+    <div class="a">A: We use RDS Event Subscriptions &rarr; SNS &rarr; Lambda. RDS emits events for snapshot completion, failover, parameter changes, etc. The SNS topic fans out to a Lambda that triggers the appropriate GitHub Actions workflow via <code>repository_dispatch</code>. Latency is typically under 30 seconds. No polling, no cron &ndash; pure event-driven.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: What happens if PVC storage fills up?</div>
+    <div class="a">A: We set alerts at 80% capacity via Prometheus <code>kubelet_volume_stats_used_bytes</code>. If it fills, the runner pod gets an I/O error and the job fails gracefully &ndash; it doesn&rsquo;t crash the node. Recovery: expand the PVC (if using a CSI driver that supports expansion), or run a cache-cleanup job that prunes entries older than N days. AKS supports online PVC expansion for Azure Disk and Azure Files.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Can multiple workflows share the same cache volume?</div>
+    <div class="a">A: Yes, with caveats. Use <code>ReadWriteMany</code> (RWX) access mode with Azure Files. Multiple pods can mount the same PVC simultaneously. For <code>ReadWriteOnce</code> (RWO) volumes like Azure Disk, only one pod can mount at a time &ndash; use separate PVCs per runner or schedule sequentially. We recommend RWX for shared caches and RWO for runner-specific scratch space.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: What happens if the AKS cluster itself fails?</div>
+    <div class="a">A: The workflow YAML uses a <code>runs-on</code> label fallback strategy. If the self-hosted runner is unavailable for &gt;5 minutes, the job can be configured to fall back to <code>ubuntu-latest</code> using a matrix strategy or a reusable workflow with conditional runner selection. The AKS control plane has a 99.95% SLA (with uptime SLA enabled). For node failures, the cluster autoscaler replaces nodes within 2&ndash;4 minutes.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: How do we manage custom runner images?</div>
+    <div class="a">A: Build custom images using a Dockerfile based on <code>ghcr.io/actions/actions-runner</code>. Store in ACR (Azure Container Registry) with geo-replication. Use a GitHub Actions workflow to build and push the image on changes &ndash; dogfooding at its best. ARC references the image in the <code>RunnerDeployment</code> spec. Tag images with semver and pin runner deployments to specific versions for stability.</div>
+  </div>
+</div>
+
+<!-- SLIDE 23: Q&A — Security & Compliance -->
+<div class="slide" data-title="Q&amp;A &ndash; Security &amp; Compliance">
+  <div class="slide-notes">Security questions come from the CISO or security architect. Key message: YOUR data stays in YOUR tenant. GitHub only sees orchestration metadata.</div>
+
+  <h1>&#128274; Q&amp;A &ndash; Security &amp; Compliance</h1>
+  <p class="subtitle">Questions from CISOs and security architects</p>
+
+  <div class="qa-item">
+    <div class="q">Q: Where does our data physically reside during CI/CD?</div>
+    <div class="a">A: With self-hosted runners on AKS, all build artifacts, source code, and secrets stay within YOUR Azure tenant and subscription. Code is cloned into the runner pod, processed there, and artifacts are pushed to YOUR storage. GitHub&rsquo;s control plane only sees job metadata: start time, duration, status, labels. No source code or build output ever transits GitHub&rsquo;s infrastructure.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Can this architecture meet HIPAA / SOC2 requirements?</div>
+    <div class="a">A: Yes. AKS runs in your HIPAA-eligible Azure subscription. Use dedicated node pools with encryption at rest (Azure Disk Encryption) and in transit (TLS 1.2+). Enable Azure Policy for compliance guardrails. For SOC2, the audit trail comes from GitHub&rsquo;s audit log API + Azure Monitor + Defender for Containers. The key: data never leaves your compliance boundary.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Does GitHub see our source code or secrets?</div>
+    <div class="a">A: No. With self-hosted runners, GitHub sends a job payload (workflow YAML instructions) to the runner. The runner pulls code directly from your repo using a short-lived token. Secrets are injected from GitHub&rsquo;s encrypted vault into the runner environment &ndash; they&rsquo;re never logged or persisted. GitHub never has access to your runner&rsquo;s filesystem, network, or compute resources.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: How is network isolation achieved?</div>
+    <div class="a">A: AKS runners operate inside your VNet. Use Network Policies (Calico or Azure NPM) to restrict pod-to-pod traffic. Place runners in a dedicated subnet with NSG rules. For private repos, use GitHub&rsquo;s private networking (IPSEC tunnel or Azure Private Link). Egress can be locked down to specific endpoints via Azure Firewall or NAT Gateway with allow-lists for registries, package managers, and GitHub API endpoints only.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: How do we handle image vulnerabilities?</div>
+    <div class="a">A: Three layers of defense: (1) Scan base images in ACR with Microsoft Defender for Containers &ndash; blocks deployment of images with critical CVEs. (2) Run Trivy or Snyk in the image build pipeline before pushing to ACR. (3) Use AKS image cleaner to remove stale images from nodes. Pin base images to digest (not tag) to prevent supply-chain attacks via tag mutation.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: What audit trail exists for runner activity?</div>
+    <div class="a">A: Three sources: (1) GitHub Audit Log &ndash; captures who triggered workflows, which runners were used, and job outcomes (API + streaming to SIEM). (2) AKS diagnostic logs &ndash; pod lifecycle, resource consumption, network flows via Azure Monitor. (3) Application-level logs from the runner process itself, forwarded to Log Analytics. All three can be correlated by workflow run ID for end-to-end traceability.</div>
+  </div>
+</div>
+
+<!-- SLIDE 24: Q&A — Migration & Vendor Lock-in -->
+<div class="slide" data-title="Q&amp;A &ndash; Migration &amp; Lock-in">
+  <div class="slide-notes">Migration fear is the #1 blocker to adoption. Your strongest card: 'Change one YAML line back to ubuntu-latest. Done. Zero lock-in.' Say it with confidence.</div>
+
+  <h1>&#128256; Q&amp;A &ndash; Migration &amp; Vendor Lock-in</h1>
+  <p class="subtitle">Addressing the #1 blocker to adoption</p>
+
+  <h2 style="margin-top:0.8em;">Migration Questions</h2>
+
+  <div class="qa-item">
+    <div class="q">Q: How long from kickoff to production?</div>
+    <div class="a">A: Typical timeline: Week 1 &ndash; AKS cluster + ARC setup. Week 2 &ndash; First workflow migrated and validated. Week 3&ndash;4 &ndash; Cache optimization + monitoring. Week 5+ &ndash; Incremental migration of remaining workflows. Most teams have their first workflow running on self-hosted runners within 5 business days. Full fleet migration depends on workflow count, but 80% of value comes from the first 20% of workflows migrated.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Can we migrate incrementally (not big-bang)?</div>
+    <div class="a">A: Absolutely &ndash; this is the recommended approach. Use runner labels to route specific workflows to self-hosted runners while others continue on <code>ubuntu-latest</code>. Start with your slowest, most expensive workflow. Prove value, then expand. A single repository can have workflows running on both hosted and self-hosted runners simultaneously. No coordination required.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: What&rsquo;s the rollback plan if something goes wrong?</div>
+    <div class="a">A: Change <code>runs-on: self-hosted</code> back to <code>runs-on: ubuntu-latest</code>. One line. One commit. One minute. The workflow immediately runs on GitHub-hosted runners again. Your AKS infrastructure stays intact for debugging. This is the single strongest argument against lock-in fear &ndash; rollback is literally one YAML line.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: What team/skills do we need?</div>
+    <div class="a">A: You need: (1) A platform/DevOps engineer comfortable with Kubernetes basics (deployments, PVCs, Helm). (2) A GitHub Actions author who understands workflow YAML. (3) Optional: a networking engineer for VNet peering / private link setup. Most teams don&rsquo;t need a dedicated Kubernetes expert &ndash; ARC abstracts most of the complexity. If you can run <code>helm install</code>, you can run ARC.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Do we have to rewrite our workflows?</div>
+    <div class="a">A: No. The only required change is the <code>runs-on:</code> label. Everything else &ndash; steps, actions, secrets, environment variables &ndash; works identically. Optional enhancements (cache mounts, S3 sync) are additive. Your existing workflows are 100% compatible. We&rsquo;ve migrated teams with 200+ workflows; the YAML diff is typically 1&ndash;3 lines per file.</div>
+  </div>
+
+  <h2 style="margin-top:0.8em;">Lock-in Questions</h2>
+
+  <div class="qa-item">
+    <div class="q">Q: Are we locked into Azure by choosing AKS?</div>
+    <div class="a">A: ARC runs on any Kubernetes cluster &ndash; AKS, EKS, GKE, on-prem, even k3s. We recommend AKS for Azure-native workloads, but the runner controller is cloud-agnostic. You could run ARC on EKS tomorrow with the same Helm chart. Your workflows don&rsquo;t reference Azure at all &ndash; they only reference runner labels.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: What if ARC pricing changes?</div>
+    <div class="a">A: ARC (Actions Runner Controller) is open-source under Apache 2.0. GitHub doesn&rsquo;t charge for ARC itself &ndash; you pay only for the AKS compute. Even if GitHub changed the runner registration model, the open-source controller could be forked. Your real cost is AKS nodes, which are standard Azure VMs with published pricing and reserved instance options.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Why not just use AWS CodeBuild?</div>
+    <div class="a">A: CodeBuild is solid for AWS-only shops. But: (1) No persistent cache across builds without custom S3 logic. (2) No native GitHub integration &ndash; you need CodePipeline or webhooks. (3) Vendor lock-in to AWS build specs. (4) Limited runner customization. If you&rsquo;re all-in on AWS and don&rsquo;t use GitHub Actions, CodeBuild is fine. If GitHub is your SCM, self-hosted runners give you tighter integration and more control.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Why not Jenkins on Kubernetes?</div>
+    <div class="a">A: Jenkins on K8s works and is battle-tested. Trade-offs: (1) You maintain the Jenkins control plane (upgrades, plugins, security patches). (2) Jenkinsfile syntax is separate from GitHub &ndash; two systems to learn. (3) No native GitHub status checks, PR integration, or Actions marketplace. (4) Jenkins controller is a single point of failure unless you set up HA. If you already have Jenkins expertise, it&rsquo;s a valid choice. But for GitHub-native teams, ARC is simpler to operate.</div>
+  </div>
+
+  <div class="qa-item">
+    <div class="q">Q: Is our cached data portable if we leave?</div>
+    <div class="a">A: Yes. Caches are stored on standard PVCs (Azure Disk or Azure Files) or in S3/Blob Storage. They&rsquo;re just files &ndash; <code>node_modules</code>, Maven <code>.m2</code>, Docker layers. No proprietary format. You can mount the same PVC on any Kubernetes cluster or copy the data anywhere. The cache strategy is yours, not GitHub&rsquo;s.</div>
+  </div>
+</div>
+
+<!-- SLIDE 25: Competitive Comparison -->
+<div class="slide" data-title="Competitive Comparison">
+  <div class="slide-notes">Be HONEST about competition. CodeBuild has zero egress in-region &mdash; acknowledge it. Jenkins is fully open source &mdash; respect that. Our edge: GitHub native + persistent cache + operational simplicity. Never trash competitors &mdash; it undermines your credibility.</div>
+
+  <h1>&#9878; Competitive Comparison</h1>
+  <p class="subtitle">Honest, side-by-side evaluation across runner strategies</p>
+
+  <div class="table-wrapper" style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;margin-top:1em;font-size:0.85em;">
+      <thead>
+        <tr style="background:#1a1a2e;color:#e0e0e0;">
+          <th style="padding:10px 12px;text-align:left;border-bottom:2px solid #00d4aa;">Capability</th>
+          <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #00d4aa;">AKS + ARC</th>
+          <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #00d4aa;">GitHub-Hosted</th>
+          <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #00d4aa;">AWS CodeBuild</th>
+          <th style="padding:10px 12px;text-align:center;border-bottom:2px solid #00d4aa;">Jenkins on K8s</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Persistent Cache</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; PVC-backed</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Limited (10GB)</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; S3 manual</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; PVC-backed</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Egress Optimization</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; VNet-local</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="r">&#9733; Public egress</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Zero in-region</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; VNet-local</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Scale-to-Zero</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; ARC native</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Fully managed</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; On-demand</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Plugin required</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">GPU Support</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; GPU node pools</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; GPU runners (beta)</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; GPU instances</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; GPU node pools</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Right-Sizing</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Full control</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Fixed tiers</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Instance types</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Full control</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Maintenance Burden</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Medium (K8s)</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Zero</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Low (managed)</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="r">&#9733; High (self-managed)</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Cost per Job</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; ~$0.002</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="r">&#9733; ~$0.008</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; ~$0.005</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; ~$0.002</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">GitHub Integration</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Native</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Native</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="r">&#9733; Webhook/API</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Plugin</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Setup Complexity</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Moderate</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; None</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Moderate</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="r">&#9733; High</span></td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Lock-in Risk</td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Low (1 YAML line)</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="g">&#9733; Low</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="r">&#9733; High (buildspec)</span></td>
+          <td style="padding:8px 12px;text-align:center;border-bottom:1px solid #333;"><span class="y">&#9733; Medium (Jenkinsfile)</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p style="margin-top:1em;font-size:0.8em;opacity:0.7;text-align:center;">
+    <span class="g">&#9733; Green</span> = Strong &nbsp;&nbsp;
+    <span class="y">&#9733; Yellow</span> = Adequate &nbsp;&nbsp;
+    <span class="r">&#9733; Red</span> = Weakness
+  </p>
+</div>
+
+<!-- SLIDE 26: Documentation & Resources -->
+<div class="slide" data-title="Documentation &amp; Resources">
+  <div class="slide-notes">Point people to these resources at the end. Mention that all links are in the PDF handout they'll receive. Don't read the URLs aloud &mdash; just highlight the categories.</div>
+
+  <h1>&#128218; Documentation &amp; Resources</h1>
+  <p class="subtitle">All links for your reference (offline-friendly &ndash; URLs displayed as text)</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5em;margin-top:1.2em;font-size:0.82em;">
+
+    <!-- Column 1 -->
+    <div>
+      <h3 style="color:#00d4aa;margin-bottom:0.6em;border-bottom:1px solid #00d4aa;padding-bottom:0.3em;">Core GitHub Docs</h3>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>Runners Overview</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">docs.github.com/en/actions/concepts/runners</span>
+      </p>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>Self-Hosted Reference</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">docs.github.com/actions/reference/runners/self-hosted-runners</span>
+      </p>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>Security Hardening</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">docs.github.com/en/actions/security-guides/security-hardening-for-github-actions</span>
+      </p>
+    </div>
+
+    <!-- Column 2 -->
+    <div>
+      <h3 style="color:#00d4aa;margin-bottom:0.6em;border-bottom:1px solid #00d4aa;padding-bottom:0.3em;">AKS &amp; ARC</h3>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>ARC on AKS</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">learn.microsoft.com/en-us/azure/aks/github-actions-azure-files-overview</span>
+      </p>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>ARC Quick Start</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners-with-actions-runner-controller</span>
+      </p>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>ARC Helm Charts</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">github.com/actions/actions-runner-controller</span>
+      </p>
+    </div>
+
+    <!-- Column 3 -->
+    <div>
+      <h3 style="color:#00d4aa;margin-bottom:0.6em;border-bottom:1px solid #00d4aa;padding-bottom:0.3em;">Guides &amp; Blogs</h3>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>Hosted vs Self-Hosted</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">github.blog/enterprise-software/ci-cd/when-to-choose-github-hosted-runners-or-self-hosted-runners</span>
+      </p>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>Enterprise Runners</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">docs.github.com/en/enterprise-cloud@latest/admin/managing-github-actions-for-your-enterprise</span>
+      </p>
+
+      <p style="margin-bottom:0.8em;">
+        <strong>Security Cheat Sheet</strong><br>
+        <span style="opacity:0.7;word-break:break-all;">blog.gitguardian.com/github-actions-security-cheat-sheet</span>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<!-- SLIDE 27: Fallback Plans & Key Takeaways -->
+<div class="slide" data-title="Fallback Plans &amp; Key Takeaways">
+  <div class="slide-notes">End on this slide. Read the key takeaways out loud. Pause after each one. Then: 'What questions do you have?' NOT 'Any questions?' &mdash; the first invites engagement, the second invites silence.</div>
+
+  <h1>&#127919; Fallback Plans &amp; Key Takeaways</h1>
+
+  <h2 style="margin-top:0.8em;">Fallback Plans by Demo Segment</h2>
+
+  <div class="table-wrapper" style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;margin-top:0.5em;font-size:0.82em;">
+      <thead>
+        <tr style="background:#1a1a2e;color:#e0e0e0;">
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #00d4aa;">Demo Segment</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #00d4aa;">Option A</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #00d4aa;">Option B</th>
+          <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #00d4aa;">Option C</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;"><strong>Workflow Dispatch</strong></td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Use pre-recorded GIF of dispatch</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Trigger via CLI: <code>gh workflow run</code></td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Show completed run from earlier today</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;"><strong>Cache Hit Demo</strong></td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Show side-by-side screenshots of logs</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Use offline HTML with embedded timing data</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Walk through the YAML and explain the flow</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;"><strong>AKS Cluster View</strong></td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Use Azure Portal screenshots</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Run <code>kubectl get pods</code> from terminal</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Show architecture diagram and explain</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;"><strong>Cost Dashboard</strong></td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Show exported CSV with cost data</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Use static Grafana screenshot</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Whiteboard the cost calculation live</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;"><strong>Scale-to-Zero</strong></td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Show HPA config YAML and explain</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Show node count graph from Azure Monitor</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #333;">Describe the scaling flow on whiteboard</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 style="margin-top:1.2em;">Key Takeaways</h2>
+
+  <div style="font-size:0.95em;line-height:1.8;">
+    <p>&#10004; One workflow, multiple execution targets &ndash; route with labels</p>
+    <p>&#10004; No forced all-in-cloud decision &ndash; adopt incrementally at your pace</p>
+    <p>&#10004; Labels route jobs to the right runner &ndash; <code>runs-on:</code> is your control plane</p>
+    <p>&#10004; ARC enables scale-to-zero &ndash; pay only when pipelines run</p>
+    <p>&#10004; 92% cost savings after first optimized run</p>
+    <p>&#10004; Monitor and right-size over time &ndash; continuous improvement, not one-time setup</p>
+  </div>
+
+  <div class="concept-box" style="margin-top:1.2em;text-align:center;font-size:1.1em;padding:1em;">
+    <em>&ldquo;Right runner for the right job. Migrate at your pace. Zero lock-in.&rdquo;</em>
+  </div>
+</div>
+
+</div><!-- end slides-container -->
+
+<script>
+(function(){
+'use strict';
+
+var slides = document.querySelectorAll('.slide');
+var totalSlides = slides.length;
+var currentSlide = 0;
+var overviewOpen = false;
+
+var progressBar = document.getElementById('progress-bar');
+var slideCounter = document.getElementById('slide-counter');
+var speakerNotes = document.getElementById('speaker-notes');
+var notesContent = document.getElementById('notes-content');
+var notesStatus = document.getElementById('notes-status');
+var overview = document.getElementById('overview');
+var overviewGrid = document.getElementById('overview-grid');
+var dotTooltip = document.getElementById('dot-tooltip');
+var navDots = document.getElementById('nav-dots');
+
+// Build nav dots
+function buildDots(){
+  if(!navDots) return;
+  navDots.innerHTML='';
+  for(var i=0;i<totalSlides;i++){
+    var d=document.createElement('div');
+    d.className='nav-dot'+(i===0?' active':'');
+    d.dataset.index=i;
+    d.title=slides[i].dataset.title||('Slide '+(i+1));
+    d.addEventListener('click',function(){goToSlide(parseInt(this.dataset.index));});
+    d.addEventListener('mouseenter',function(){
+      if(dotTooltip){
+        dotTooltip.textContent=this.title;
+        var r=this.getBoundingClientRect();
+        dotTooltip.style.display='block';
+        dotTooltip.style.right='28px';
+        dotTooltip.style.top=(r.top+r.height/2-10)+'px';
+      }
+    });
+    d.addEventListener('mouseleave',function(){if(dotTooltip)dotTooltip.style.display='none';});
+    navDots.appendChild(d);
+  }
+}
+
+// Build overview grid
+function buildOverview(){
+  if(!overviewGrid) return;
+  overviewGrid.innerHTML='';
+  for(var i=0;i<totalSlides;i++){
+    var t=document.createElement('div');
+    t.className='overview-thumb'+(i===currentSlide?' current':'');
+    t.innerHTML='<div class="num">Slide '+(i+1)+'</div><div class="title">'+(slides[i].dataset.title||'Untitled')+'</div>';
+    t.dataset.index=i;
+    t.addEventListener('click',function(){goToSlide(parseInt(this.dataset.index));toggleOverview();});
+    overviewGrid.appendChild(t);
+  }
+}
+
+function updateUI(){
+  var pct=((currentSlide+1)/totalSlides)*100;
+  if(progressBar) progressBar.style.width=pct+'%';
+  if(slideCounter) slideCounter.textContent=(currentSlide+1)+' / '+totalSlides;
+
+  for(var i=0;i<totalSlides;i++){
+    slides[i].classList.remove('active','prev');
+    if(i===currentSlide) slides[i].classList.add('active');
+    else if(i<currentSlide) slides[i].classList.add('prev');
+  }
+
+  // Update dots
+  var dots=navDots?navDots.querySelectorAll('.nav-dot'):[];
+  for(var j=0;j<dots.length;j++){
+    dots[j].classList.toggle('active',j===currentSlide);
+  }
+
+  // Update notes
+  loadNotes();
+
+  // Update hash
+  window.location.hash=currentSlide+1;
+}
+
+function goToSlide(n){
+  if(n<0) n=0;
+  if(n>=totalSlides) n=totalSlides-1;
+  currentSlide=n;
+  updateUI();
+}
+
+function nextSlide(){if(currentSlide<totalSlides-1) goToSlide(currentSlide+1);}
+function prevSlide(){if(currentSlide>0) goToSlide(currentSlide-1);}
+
+function toggleOverview(){
+  overviewOpen=!overviewOpen;
+  if(overview){
+    if(overviewOpen){buildOverview();overview.classList.add('open');}
+    else{overview.classList.remove('open');}
+  }
+}
+
+// Speaker notes
+var notesOpen=false;
+function toggleNotes(){
+  notesOpen=!notesOpen;
+  if(speakerNotes) speakerNotes.classList.toggle('open',notesOpen);
+  if(notesOpen) loadNotes();
+}
+// Make toggleNotes globally accessible for onclick
+window.toggleNotes=toggleNotes;
+
+function loadNotes(){
+  if(!notesContent) return;
+  // Check localStorage first
+  var saved=localStorage.getItem('notes-slide-'+currentSlide);
+  if(saved){
+    notesContent.textContent=saved;
+    return;
+  }
+  // Fall back to embedded notes
+  var notesEl=slides[currentSlide].querySelector('.slide-notes');
+  notesContent.textContent=notesEl?notesEl.textContent:'(No notes for this slide. Type here to add your own.)';
+}
+
+var saveTimeout=null;
+if(notesContent){
+  notesContent.addEventListener('input',function(){
+    if(notesStatus){notesStatus.textContent='Typing...';notesStatus.style.opacity='1';}
+    clearTimeout(saveTimeout);
+    saveTimeout=setTimeout(function(){
+      localStorage.setItem('notes-slide-'+currentSlide,notesContent.textContent);
+      if(notesStatus){notesStatus.textContent='Saved';setTimeout(function(){notesStatus.style.opacity='.5';},1200);}
+    },600);
+  });
+}
+
+// Keyboard
+document.addEventListener('keydown',function(e){
+  if(overviewOpen && e.key==='Escape'){toggleOverview();return;}
+  if(e.target.isContentEditable) return; // Don't nav while typing notes
+  switch(e.key){
+    case 'ArrowRight':case 'PageDown':case ' ':e.preventDefault();nextSlide();break;
+    case 'ArrowLeft':case 'PageUp':e.preventDefault();prevSlide();break;
+    case 'Home':e.preventDefault();goToSlide(0);break;
+    case 'End':e.preventDefault();goToSlide(totalSlides-1);break;
+    case 'o':case 'O':toggleOverview();break;
+    case 'n':case 'N':toggleNotes();break;
+    case 'f':case 'F':
+      if(document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+      break;
+    case 'Escape':
+      if(notesOpen) toggleNotes();
+      break;
+  }
+});
+
+// Click navigation
+document.addEventListener('click',function(e){
+  if(overviewOpen) return;
+  if(e.target.closest('#speaker-notes,#nav-dots,#nav-hint,#notes-hint,#overview,.concept-box,.screenshot,.code-block,.table-wrapper,.qa-item')) return;
+  if(e.clientX>window.innerWidth*0.5) nextSlide();
+  else prevSlide();
+});
+
+// Touch
+var touchStartX=0,touchStartY=0;
+document.addEventListener('touchstart',function(e){touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;},{passive:true});
+document.addEventListener('touchend',function(e){
+  var dx=e.changedTouches[0].clientX-touchStartX;
+  var dy=e.changedTouches[0].clientY-touchStartY;
+  if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>50){
+    if(dx<0) nextSlide(); else prevSlide();
+  }
+},{passive:true});
+
+// Hash nav
+function handleHash(){
+  var h=window.location.hash.replace('#','');
+  var n=parseInt(h);
+  if(!isNaN(n)&&n>=1&&n<=totalSlides) goToSlide(n-1);
+}
+window.addEventListener('hashchange',handleHash);
+
+// Init
+buildDots();
+handleHash();
+updateUI();
+
+})();
+</script>
+</body>
+</html>

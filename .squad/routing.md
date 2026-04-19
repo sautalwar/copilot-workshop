@@ -15,6 +15,7 @@ How to decide who handles what.
 | Competitive analysis, tool comparison | Redfoot | Copilot vs Cursor/Cloud Code/Windsurf |
 | Repo investigation, what exists, duplication check | Kujan | Scan existing work, prevent rework, map coverage |
 | Session export, save PDF, session report | Strausz | Capture Q&A to PDF reference doc |
+| Java fixes, implement perf findings, bug fixes, issue implementation | Baer | Apply N+1 fixes, pagination, caching, Spring Boot code changes |
 | Code review | Keaton | Review PRs, check quality, suggest improvements |
 | Copilot customization, instructions, prompts, agents, skills, MCP config | Edie | copilot-instructions.md, .prompt.md, .chatmode.md, .agent.md, .skill.md, MCP servers, hooks |
 | Session logging | Scribe | Automatic — never needs routing |

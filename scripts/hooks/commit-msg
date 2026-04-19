@@ -1,0 +1,62 @@
+#!/bin/sh
+# ============================================================
+# commit-msg — Enforce conventional commit message format
+# ============================================================
+# Format: type(scope): description
+# Types:  feat, fix, refactor, test, docs, chore
+#
+# Examples:
+#   feat(orders): add bulk order creation endpoint
+#   fix(inventory): correct low-stock threshold check
+#   test(orders): add edge case for empty order list
+#   docs(readme): update build instructions
+#
+# Install: ./scripts/install-hooks.sh
+# Skip:    git commit --no-verify
+# ============================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+COMMIT_MSG_FILE="$1"
+
+# Read first line of commit message (ignore comments)
+FIRST_LINE=$(grep -v '^#' "$COMMIT_MSG_FILE" | head -n 1)
+
+# Allow merge commits and revert commits
+if echo "$FIRST_LINE" | grep -qE '^(Merge|Revert) '; then
+    exit 0
+fi
+
+# Validate format: type(scope): description
+PATTERN='^(feat|fix|refactor|test|docs|chore)(\([a-z0-9-]+\))?: .{1,}'
+
+if ! echo "$FIRST_LINE" | grep -qE "$PATTERN"; then
+    printf "\n${RED}✗ Invalid commit message format.${NC}\n"
+    printf "\n"
+    printf "  Your message:  ${YELLOW}%s${NC}\n" "$FIRST_LINE"
+    printf "\n"
+    printf "  Expected:      ${GREEN}type(scope): description${NC}\n"
+    printf "\n"
+    printf "  Allowed types: feat, fix, refactor, test, docs, chore\n"
+    printf "\n"
+    printf "  Examples:\n"
+    printf "    ${GREEN}feat(orders): add bulk order creation endpoint${NC}\n"
+    printf "    ${GREEN}fix(inventory): correct low-stock threshold check${NC}\n"
+    printf "    ${GREEN}test(orders): add edge case for empty order list${NC}\n"
+    printf "    ${GREEN}chore: update Maven dependencies${NC}\n"
+    printf "\n"
+    printf "  ${YELLOW}Tip: Scope is optional. Use --no-verify to skip.${NC}\n"
+    exit 1
+fi
+
+# Check description length (warn if over 72 chars)
+LENGTH=$(echo "$FIRST_LINE" | wc -c)
+if [ "$LENGTH" -gt 73 ]; then
+    printf "${YELLOW}⚠ Commit subject is %d characters (recommended: ≤72).${NC}\n" "$((LENGTH - 1))"
+fi
+
+printf "${GREEN}✓ commit-msg: Format OK.${NC}\n"
+exit 0

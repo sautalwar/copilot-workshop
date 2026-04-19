@@ -1,0 +1,96 @@
+#!/bin/sh
+# ============================================================
+# pre-commit — Catch common violations before they're committed
+# ============================================================
+# Checks:
+#   1. Secret scanning (gitleaks) if available
+#   2. No System.out.println in Java files
+#   3. No field-level @Autowired in Java files
+#   4. No SELECT * in SQL files
+#
+# Install: ./scripts/install-hooks.sh
+# Skip:    git commit --no-verify
+# ============================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+ERRORS=0
+
+# Get staged files (only added/modified, not deleted)
+STAGED_JAVA=$(git diff --cached --name-only --diff-filter=ACM | grep '\.java$' || true)
+STAGED_SQL=$(git diff --cached --name-only --diff-filter=ACM | grep '\.sql$' || true)
+
+# -----------------------------------------------------------
+# 1. Secret scanning with gitleaks
+# -----------------------------------------------------------
+if command -v gitleaks > /dev/null 2>&1; then
+    printf "${YELLOW}🔍 Running gitleaks secret scan...${NC}\n"
+    if ! gitleaks protect --staged --no-banner --exit-code 1 > /dev/null 2>&1; then
+        printf "${RED}✗ Secrets detected in staged files! Run 'gitleaks protect --staged --verbose' for details.${NC}\n"
+        ERRORS=$((ERRORS + 1))
+    fi
+else
+    printf "${YELLOW}⚠ gitleaks not installed — skipping secret scan. Install: https://github.com/gitleaks/gitleaks${NC}\n"
+fi
+
+# -----------------------------------------------------------
+# 2. No System.out.println in Java files
+# -----------------------------------------------------------
+if [ -n "$STAGED_JAVA" ]; then
+    printf "${YELLOW}🔍 Checking for System.out.println...${NC}\n"
+    for file in $STAGED_JAVA; do
+        # Check staged content (not working tree)
+        HITS=$(git diff --cached -U0 "$file" | grep -E '^\+.*System\.(out|err)\.(print|println)' || true)
+        if [ -n "$HITS" ]; then
+            printf "${RED}✗ %s: Use SLF4J for logging, not System.out/err${NC}\n" "$file"
+            printf "  %s\n" "$HITS"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
+
+# -----------------------------------------------------------
+# 3. No field-level @Autowired (constructor injection only)
+# -----------------------------------------------------------
+if [ -n "$STAGED_JAVA" ]; then
+    printf "${YELLOW}🔍 Checking for field-level @Autowired...${NC}\n"
+    for file in $STAGED_JAVA; do
+        # Look for @Autowired followed by a field declaration (not a constructor)
+        HITS=$(git diff --cached -U0 "$file" | grep -E '^\+.*@Autowired' || true)
+        if [ -n "$HITS" ]; then
+            printf "${RED}✗ %s: Use constructor injection instead of @Autowired on fields${NC}\n" "$file"
+            printf "  %s\n" "$HITS"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
+
+# -----------------------------------------------------------
+# 4. No SELECT * in SQL files
+# -----------------------------------------------------------
+if [ -n "$STAGED_SQL" ]; then
+    printf "${YELLOW}🔍 Checking for SELECT * in SQL files...${NC}\n"
+    for file in $STAGED_SQL; do
+        HITS=$(git diff --cached -U0 "$file" | grep -Ei '^\+.*SELECT\s+\*' || true)
+        if [ -n "$HITS" ]; then
+            printf "${RED}✗ %s: Use explicit column names instead of SELECT *${NC}\n" "$file"
+            printf "  %s\n" "$HITS"
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
+
+# -----------------------------------------------------------
+# Result
+# -----------------------------------------------------------
+if [ "$ERRORS" -gt 0 ]; then
+    printf "\n${RED}✗ pre-commit: %d error(s) found. Commit blocked.${NC}\n" "$ERRORS"
+    printf "${YELLOW}  Tip: Use 'git commit --no-verify' to skip hooks in emergencies.${NC}\n"
+    exit 1
+fi
+
+printf "${GREEN}✓ pre-commit: All checks passed.${NC}\n"
+exit 0

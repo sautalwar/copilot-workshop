@@ -8,7 +8,11 @@ import java.time.LocalDate;
  * Maps to the legacy system's ORDER_HEADER table concept.
  */
 @Entity
-@Table(name = "orders")
+@Table(name = "orders", indexes = {
+    @Index(name = "idx_order_status", columnList = "status"),
+    @Index(name = "idx_order_customer_name", columnList = "customerName"),
+    @Index(name = "idx_order_date", columnList = "orderDate")
+})
 public class Order {
 
     @Id

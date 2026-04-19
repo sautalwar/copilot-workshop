@@ -1,0 +1,43 @@
+#!/bin/sh
+# ============================================================
+# prepare-commit-msg — Auto-populate commit message template
+# ============================================================
+# If the commit message is empty (new commit, not amend/merge),
+# prepends a template showing the expected format.
+#
+# Install: ./scripts/install-hooks.sh
+# ============================================================
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Only modify for new commits (not amend, merge, squash)
+if [ -n "$COMMIT_SOURCE" ]; then
+    exit 0
+fi
+
+# Check if the message is effectively empty (just comments)
+CONTENT=$(grep -v '^#' "$COMMIT_MSG_FILE" | grep -v '^$' || true)
+if [ -z "$CONTENT" ]; then
+    # Prepend the template before existing comments
+    TEMP_FILE=$(mktemp)
+    cat > "$TEMP_FILE" << 'EOF'
+
+# ──────────────────────────────────────────────
+# Commit message format: type(scope): description
+#
+# Types: feat | fix | refactor | test | docs | chore
+# Scope: orders | inventory | mcp | config (optional)
+#
+# Examples:
+#   feat(orders): add bulk order creation endpoint
+#   fix(inventory): correct low-stock threshold check
+#   test(orders): add edge case for empty order list
+#   chore: update Maven dependencies
+# ──────────────────────────────────────────────
+EOF
+    cat "$COMMIT_MSG_FILE" >> "$TEMP_FILE"
+    mv "$TEMP_FILE" "$COMMIT_MSG_FILE"
+fi
+
+exit 0

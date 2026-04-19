@@ -3,6 +3,8 @@ package com.outfront.workshop.controller;
 import com.outfront.workshop.model.Order;
 import com.outfront.workshop.model.Order.OrderStatus;
 import com.outfront.workshop.service.OrderService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,15 +27,16 @@ public class OrderController {
     }
 
     @GetMapping
-    public List<Order> getAllOrders(@RequestParam(required = false) String status,
-                                   @RequestParam(required = false) String customer) {
+    public Page<Order> getAllOrders(@RequestParam(required = false) String status,
+                                    @RequestParam(required = false) String customer,
+                                    Pageable pageable) {
         if (status != null) {
-            return orderService.getOrdersByStatus(OrderStatus.valueOf(status.toUpperCase()));
+            return orderService.getOrdersByStatus(OrderStatus.valueOf(status.toUpperCase()), pageable);
         }
         if (customer != null) {
-            return orderService.getOrdersByCustomer(customer);
+            return orderService.getOrdersByCustomer(customer, pageable);
         }
-        return orderService.getAllOrders();
+        return orderService.getAllOrders(pageable);
     }
 
     @GetMapping("/{id}")

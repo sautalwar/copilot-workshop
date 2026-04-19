@@ -8,7 +8,11 @@ import java.time.LocalDate;
  * Tracks billboard components, displays, and accessories.
  */
 @Entity
-@Table(name = "inventory_item")
+@Table(name = "inventory_item", indexes = {
+    @Index(name = "idx_inventory_name", columnList = "name"),
+    @Index(name = "idx_inventory_location", columnList = "location"),
+    @Index(name = "idx_inventory_quantity", columnList = "quantity")
+})
 public class InventoryItem {
 
     @Id
