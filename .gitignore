@@ -46,3 +46,7 @@ logs/
 .squad/sessions/
 # Squad: SubSquad activation file (local to this machine)
 .squad-workstream
+
+# Exclude all HTML and PDF files from version control
+*.html
+*.pdf
