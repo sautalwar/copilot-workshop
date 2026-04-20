@@ -1,5 +1,0 @@
-{
-  "universes": ["the-usual-suspects", "alien", "star-wars", "lotr", "matrix", "blade-runner", "dune", "firefly", "expanse", "foundation", "neuromancer", "snow-crash", "enders-game", "hitchhikers", "westworld"],
-  "default_capacity": 8,
-  "overflow_strategy": "diegetic-expansion-first"
-}
